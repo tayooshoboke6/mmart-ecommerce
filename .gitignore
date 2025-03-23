@@ -1,0 +1,40 @@
+# Dependencies
+/frontend/node_modules
+/livebackend/vendor
+/livebackend/node_modules
+
+# Environment files
+/frontend/.env
+/frontend/.env.local
+/frontend/.env.development.local
+/frontend/.env.test.local
+/frontend/.env.production.local
+/livebackend/.env
+
+# Build files
+/frontend/build
+/frontend/dist
+
+# Logs
+/frontend/npm-debug.log*
+/frontend/yarn-debug.log*
+/frontend/yarn-error.log*
+/livebackend/npm-debug.log
+/livebackend/yarn-error.log
+/livebackend/storage/logs/*.log
+
+# Cache and compiled files
+/livebackend/bootstrap/cache/*
+/livebackend/storage/framework/cache/*
+/livebackend/storage/framework/sessions/*
+/livebackend/storage/framework/views/*
+
+# IDE files
+.idea
+.vscode
+*.sublime-project
+*.sublime-workspace
+
+# Misc
+.DS_Store
+Thumbs.db
