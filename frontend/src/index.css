@@ -4,6 +4,18 @@
 @tailwind utilities;
 
 /* Base styles */
+:root {
+  /* Base scale factor to make the UI appear at approximately 95% size by default */
+  font-size: 95%;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+}
+
 body {
   margin: 0;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
@@ -11,6 +23,13 @@ body {
     sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  /* Using a responsive font size that scales with viewport */
+  font-size: 1.05rem; /* Compensate for the 95% root font size (1/0.95 ≈ 1.05) */
+}
+
+/* Adjust container widths to be wider to show more content */
+.container {
+  max-width: 105% !important; /* Make containers wider to show more content */
 }
 
 code {

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useLocation } from 'react-router-dom';
 import { useCart } from '../context/CartContext';
 import ProductService from '../services/product.service';
 import Button from '../components/ui/Button';
@@ -8,6 +8,7 @@ import { formatNaira } from '../utils/formatters';
 const ProductDetail = () => {
   const { slug } = useParams();
   const { addToCart, loading: cartLoading } = useCart();
+  const location = useLocation();
   
   const [product, setProduct] = useState(null);
   const [relatedProducts, setRelatedProducts] = useState([]);
@@ -23,10 +24,56 @@ const ProductDetail = () => {
       setLoading(true);
       try {
         // In a real implementation, this would be an API call
-        // For now, we'll use dummy data
+        let realProduct = null;
         
-        // Simulate API delay
-        setTimeout(() => {
+        try {
+          console.log('Attempting to fetch product with slug:', slug);
+          const response = await ProductService.getProduct(slug);
+          if (response && response.product) {
+            realProduct = {
+              ...response.product,
+              // Map any fields that might have different names
+              images: response.product.images || 
+                     (response.product.image_url ? [response.product.image_url] : []),
+              // Add default ratings if not provided by API
+              ratings: response.product.ratings || {
+                average: 0,
+                count: 0,
+                distribution: []
+              },
+              // Add default empty array for features
+              features: response.product.features || []
+            };
+            console.log('Successfully fetched real product:', realProduct);
+            setProduct(realProduct);
+            
+            // Try to fetch related products if available
+            if (realProduct.category_id) {
+              try {
+                const relatedResponse = await ProductService.getCategoryProducts(
+                  realProduct.category_id, 
+                  { limit: 4, exclude: realProduct.id }
+                );
+                if (relatedResponse && relatedResponse.products && relatedResponse.products.length > 0) {
+                  setRelatedProducts(relatedResponse.products);
+                  setLoading(false);
+                  return; // Exit early if we have all the data we need
+                }
+              } catch (relatedError) {
+                console.log('Failed to fetch related products:', relatedError);
+              }
+            }
+          }
+        } catch (apiError) {
+          console.log('API call for product failed:', apiError);
+        }
+        
+        // If we reach here, either the API call failed or we couldn't get related products
+        // Fall back to mock data
+        console.log('Falling back to mock data');
+        
+        // Generate dummy product (only if we don't have a real one)
+        if (!realProduct) {
           // Generate dummy product
           const dummyProduct = {
             id: 1,
@@ -62,6 +109,7 @@ const ProductDetail = () => {
               'https://via.placeholder.com/600x600?text=Headphones+Case'
             ],
             category_id: 2,
+            category_slug: 'electronics',
             category_name: 'Electronics',
             ratings: {
               average: 4.5,
@@ -103,13 +151,14 @@ const ProductDetail = () => {
           };
           
           setProduct(dummyProduct);
-          
-          // Generate dummy related products
-          const dummyRelatedProducts = Array(4).fill().map((_, index) => ({
-            id: index + 2,
-            name: `Related Product ${index + 1}`,
-            slug: `related-product-${index + 1}`,
-            description: `This is a description for related product ${index + 1}.`,
+    }
+        
+        // Generate dummy related products
+        const dummyRelatedProducts = Array(4).fill().map((_, index) => ({
+          id: index + 2,
+          name: `Related Product ${index + 1}`,
+          slug: `related-product-${index + 1}`,
+          description: `This is a description for related product ${index + 1}.`,
             base_price: Math.floor(Math.random() * 50000) + 10000,
             sale_price: Math.random() > 0.5 ? Math.floor(Math.random() * 40000) + 10000 : null,
             image: `https://via.placeholder.com/300x300?text=Related${index + 1}`,
@@ -119,13 +168,12 @@ const ProductDetail = () => {
           
           setRelatedProducts(dummyRelatedProducts);
           setLoading(false);
-        }, 1000);
-      } catch (err) {
-        console.error('Error fetching product details:', err);
-        setError(err);
-        setLoading(false);
-      }
-    };
+        } catch (err) {
+          console.error('Error fetching product details:', err);
+          setError(err);
+          setLoading(false);
+        }
+      };
     
     fetchProductDetails();
   }, [slug]);
@@ -231,11 +279,15 @@ const ProductDetail = () => {
         <nav className="flex mb-6 text-sm">
           <Link to="/" className="text-gray-500 hover:text-primary">Home</Link>
           <span className="mx-2 text-gray-500">/</span>
-          <Link to="/products" className="text-gray-500 hover:text-primary">Products</Link>
-          <span className="mx-2 text-gray-500">/</span>
-          <Link to={`/categories/${product.category_id}`} className="text-gray-500 hover:text-primary">
-            {product.category_name}
-          </Link>
+          <Link to="/categories" className="text-gray-500 hover:text-primary">Categories</Link>
+          {product.category_slug && (
+            <>
+              <span className="mx-2 text-gray-500">/</span>
+              <Link to={`/categories/${product.category_slug}`} className="text-gray-500 hover:text-primary">
+                {product.category_name}
+              </Link>
+            </>
+          )}
           <span className="mx-2 text-gray-500">/</span>
           <span className="text-gray-900">{product.name}</span>
         </nav>
@@ -282,7 +334,7 @@ const ProductDetail = () => {
                     <svg
                       key={star}
                       className={`w-5 h-5 ${
-                        star <= Math.round(product.ratings.average)
+                        star <= Math.round(product.ratings?.average || 0)
                           ? 'text-yellow-400'
                           : 'text-gray-300'
                       }`}
@@ -294,7 +346,7 @@ const ProductDetail = () => {
                   ))}
                 </div>
                 <span className="text-gray-600 ml-2">
-                  {product.ratings.average} ({product.ratings.count} reviews)
+                  {product.ratings?.average} ({product.ratings?.count})
                 </span>
               </div>
               
@@ -446,7 +498,7 @@ const ProductDetail = () => {
                     : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                 }`}
               >
-                Reviews ({product.ratings.count})
+                Reviews ({product.ratings?.count})
               </button>
             </div>
             
@@ -486,13 +538,13 @@ const ProductDetail = () => {
                   {/* Rating summary */}
                   <div className="flex flex-col md:flex-row gap-8 mb-8">
                     <div className="md:w-1/3 flex flex-col items-center justify-center">
-                      <div className="text-5xl font-bold text-gray-900 mb-2">{product.ratings.average}</div>
+                      <div className="text-5xl font-bold text-gray-900 mb-2">{product.ratings?.average}</div>
                       <div className="flex mb-1">
                         {[1, 2, 3, 4, 5].map((star) => (
                           <svg
                             key={star}
                             className={`w-5 h-5 ${
-                              star <= Math.round(product.ratings.average)
+                              star <= Math.round(product.ratings?.average || 0)
                                 ? 'text-yellow-400'
                                 : 'text-gray-300'
                             }`}
@@ -503,11 +555,11 @@ const ProductDetail = () => {
                           </svg>
                         ))}
                       </div>
-                      <div className="text-gray-500 text-sm">Based on {product.ratings.count} reviews</div>
+                      <div className="text-gray-500 text-sm">Based on {product.ratings?.count} reviews</div>
                     </div>
                     
                     <div className="md:w-2/3">
-                      {product.ratings.distribution.map((item) => (
+                      {product.ratings?.distribution.map((item) => (
                         <div key={item.rating} className="flex items-center mb-2">
                           <div className="w-12 text-sm text-gray-600">{item.rating} star</div>
                           <div className="w-full bg-gray-200 rounded-full h-2.5 mx-2">

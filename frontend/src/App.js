@@ -14,7 +14,6 @@ import OrderSuccess from './pages/OrderSuccess';
 import CategoryList from './pages/CategoryList';
 
 // Import pages (to be created)
-const CategoryProducts = () => <div className="container mx-auto px-4 py-8">Category Products Coming Soon</div>;
 const Account = () => <div className="container mx-auto px-4 py-8">Account Coming Soon</div>;
 const Orders = () => <div className="container mx-auto px-4 py-8">Orders Coming Soon</div>;
 const NotFound = () => <div className="container mx-auto px-4 py-8">Page Not Found</div>;
@@ -30,7 +29,7 @@ function App() {
               <Route path="/products" element={<ProductList />} />
               <Route path="/products/:slug" element={<ProductDetail />} />
               <Route path="/categories" element={<CategoryList />} />
-              <Route path="/categories/:slug" element={<CategoryProducts />} />
+              <Route path="/categories/:slug" element={<ProductList />} />
               <Route path="/cart" element={<Cart />} />
               <Route path="/checkout" element={<Checkout />} />
               <Route path="/order-success" element={<OrderSuccess />} />
