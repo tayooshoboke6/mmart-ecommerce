@@ -39,6 +39,7 @@ class Product extends Model
         'is_expiring_soon',
         'is_clearance',
         'is_recommended',
+        'image_url',
     ];
 
     /**

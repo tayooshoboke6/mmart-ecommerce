@@ -19,6 +19,7 @@ class CategoryController extends Controller
     public function index(Request $request)
     {
         $query = Category::with('subcategories')
+            ->withCount('products as product_count')
             ->when($request->boolean('parents_only', false), function ($q) {
                 return $q->whereNull('parent_id');
             });
@@ -30,7 +31,9 @@ class CategoryController extends Controller
 
         $categories = $query->orderBy('order')->orderBy('name')->get();
 
-        return response()->json($categories);
+        return response()->json([
+            'categories' => $categories
+        ]);
     }
 
     /**
@@ -45,7 +48,7 @@ class CategoryController extends Controller
             'name' => 'required|string|max:255',
             'description' => 'nullable|string',
             'parent_id' => 'nullable|exists:categories,id',
-            'image' => 'nullable|string',
+            'image_url' => 'nullable|string',
             'is_active' => 'boolean',
             'is_featured' => 'boolean',
             'color' => 'nullable|string|max:20',
@@ -70,7 +73,7 @@ class CategoryController extends Controller
             'slug' => $slug,
             'description' => $request->description,
             'parent_id' => $request->parent_id,
-            'image' => $request->image,
+            'image_url' => $request->image_url,
             'is_active' => $request->boolean('is_active', true),
             'is_featured' => $request->boolean('is_featured', false),
             'color' => $request->input('color', '#000000'),
@@ -85,15 +88,16 @@ class CategoryController extends Controller
     /**
      * Display the specified category.
      *
-     * @param  string  $id
+     * @param  string  $slug
      * @return \Illuminate\Http\Response
      */
-    public function show($id)
+    public function show($slug)
     {
-        // Allow lookup by ID or slug
-        $category = is_numeric($id) 
-            ? Category::with('subcategories')->findOrFail($id)
-            : Category::with('subcategories')->where('slug', $id)->firstOrFail();
+        $category = Category::with('subcategories')
+            ->withCount('products as product_count')
+            ->where('slug', $slug)
+            ->where('is_active', true)
+            ->firstOrFail();
 
         return response()->json($category);
     }
@@ -113,7 +117,7 @@ class CategoryController extends Controller
             'name' => 'sometimes|string|max:255',
             'description' => 'nullable|string',
             'parent_id' => 'nullable|exists:categories,id',
-            'image' => 'nullable|string',
+            'image_url' => 'nullable|string',
             'is_active' => 'boolean',
             'is_featured' => 'boolean',
             'color' => 'nullable|string|max:20',
@@ -145,7 +149,7 @@ class CategoryController extends Controller
         }
 
         $category->update($request->only([
-            'name', 'slug', 'description', 'parent_id', 'image', 'is_active', 'is_featured', 'color',
+            'name', 'slug', 'description', 'parent_id', 'image_url', 'is_active', 'is_featured', 'color',
         ]));
 
         return response()->json([
@@ -272,6 +276,7 @@ class CategoryController extends Controller
             
            
             return [
+                'success' => true,
                 'categories' => $categoriesTree,
                 'timestamp' => now()->toIso8601String(),
                 'total_count' => count($categoriesTree),

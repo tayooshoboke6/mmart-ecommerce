@@ -18,7 +18,8 @@ class CategoryAdminController extends Controller
      */
     public function index(Request $request)
     {
-        $query = Category::with('subcategories', 'parent');
+        $query = Category::with('subcategories', 'parent')
+                ->withCount('products as product_count');
 
         // Apply filters
         if ($request->has('parent_id')) {
@@ -59,7 +60,7 @@ class CategoryAdminController extends Controller
             'name' => 'required|string|max:255',
             'description' => 'nullable|string',
             'parent_id' => 'nullable|exists:categories,id',
-            'image' => 'nullable|image|max:2048', // 2MB max
+            'image_url' => 'nullable|string',
             'is_active' => 'boolean',
             'is_featured' => 'boolean',
             'color' => 'nullable|string|max:20',
@@ -79,18 +80,12 @@ class CategoryAdminController extends Controller
             $slug = $originalSlug . '-' . $count++;
         }
 
-        // Handle image upload
-        $imagePath = null;
-        if ($request->hasFile('image')) {
-            $imagePath = $request->file('image')->store('categories', 'public');
-        }
-
         $category = Category::create([
             'name' => $request->name,
             'slug' => $slug,
             'description' => $request->description,
             'parent_id' => $request->parent_id,
-            'image' => $imagePath,
+            'image_url' => $request->image_url,
             'is_active' => $request->boolean('is_active', true),
             'is_featured' => $request->boolean('is_featured', false),
             'color' => $request->input('color', '#000000'),
@@ -110,7 +105,9 @@ class CategoryAdminController extends Controller
      */
     public function show($id)
     {
-        $category = Category::with('parent', 'subcategories')->findOrFail($id);
+        $category = Category::with('parent', 'subcategories')
+            ->withCount('products as product_count')
+            ->findOrFail($id);
 
         return response()->json($category);
     }
@@ -130,7 +127,7 @@ class CategoryAdminController extends Controller
             'name' => 'sometimes|required|string|max:255',
             'description' => 'nullable|string',
             'parent_id' => 'nullable|exists:categories,id',
-            'image' => 'nullable|image|max:2048', // 2MB max
+            'image_url' => 'nullable|string',
             'is_active' => 'boolean',
             'is_featured' => 'boolean',
             'color' => 'nullable|string|max:20',
@@ -176,19 +173,19 @@ class CategoryAdminController extends Controller
             }
         }
 
-        // Handle image upload
+        // Handle image upload if using file upload
         if ($request->hasFile('image')) {
             // Delete old image if exists
-            if ($category->image) {
-                Storage::disk('public')->delete($category->image);
+            if ($category->image_url) {
+                Storage::disk('public')->delete($category->image_url);
             }
             
             $imagePath = $request->file('image')->store('categories', 'public');
-            $request->merge(['image' => $imagePath]);
+            $request->merge(['image_url' => $imagePath]);
         }
 
         $category->update($request->only([
-            'name', 'slug', 'description', 'parent_id', 'image', 'is_active', 'is_featured', 'color',
+            'name', 'slug', 'description', 'parent_id', 'image_url', 'is_active', 'is_featured', 'color',
         ]));
 
         return response()->json([
@@ -222,8 +219,8 @@ class CategoryAdminController extends Controller
         }
 
         // Delete image if exists
-        if ($category->image) {
-            Storage::disk('public')->delete($category->image);
+        if ($category->image_url) {
+            Storage::disk('public')->delete($category->image_url);
         }
 
         $category->delete();

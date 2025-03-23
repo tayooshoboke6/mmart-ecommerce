@@ -89,7 +89,7 @@ class ProductController extends Controller
                 'stock' => 'required|integer|min:0',
                 'sku' => 'required|string|max:100|unique:products',
                 'category_id' => 'required|exists:categories,id',
-                'image' => 'nullable|string',
+                'image_url' => 'nullable|string',
                 'images' => 'nullable|array',
                 'images.*' => 'nullable|string',
                 'measurements' => 'nullable|array',
@@ -112,7 +112,7 @@ class ProductController extends Controller
             $slug = Str::slug($request->name);
 
             // Handle main product image
-            $productImage = $request->image;
+            $productImage = $request->image_url;
             if (!$productImage) {
                 // Generate placeholder if no image provided
                 $productImage = $this->cloudinaryService->generatePlaceholderUrl($request->name);
@@ -133,7 +133,7 @@ class ProductController extends Controller
                 'category_id' => $request->category_id,
                 'is_active' => $request->boolean('is_active', true),
                 'is_featured' => $request->boolean('is_featured', false),
-                'image' => $productImage,
+                'image_url' => $productImage,
             ]);
 
             // Create measurements if provided
@@ -262,7 +262,9 @@ class ProductController extends Controller
         try {
             // Log the incoming request data for debugging
             Log::info('Product update request data:', [
-                'request_data' => $request->all()
+                'request_data' => $request->all(),
+                'has_image_url' => $request->has('image_url'),
+                'image_url_value' => $request->image_url
             ]);
             
             // Find the product
@@ -290,7 +292,7 @@ class ProductController extends Controller
                 'stock_quantity' => 'required|integer|min:0',
                 'sku' => 'required|string|max:100|unique:products,sku,' . $id,
                 'category_id' => 'required|exists:categories,id',
-                'image' => 'nullable|string',
+                'image_url' => 'nullable|string',
                 'images' => 'nullable|array',
                 'images.*' => 'nullable|string',
                 'measurements' => 'nullable|array',
@@ -316,14 +318,25 @@ class ProductController extends Controller
             }
             
             // Handle product image
-            $productImage = $product->image;
-            if ($request->has('image')) {
-                $imageData = $request->image;
+            $productImage = $product->image_url;
+            $imageUpdated = false;
+            
+            Log::info('Image URL handling:', [
+                'has_image_url' => $request->has('image_url'),
+                'request_image_url' => $request->image_url,
+                'product_image_url' => $product->image_url
+            ]);
+            
+            // Always update the image_url if it's provided in the request
+            if ($request->image_url !== null) {
+                $imageData = $request->image_url;
                 if (strpos($imageData, 'data:image') === 0) {
                     // Handle base64 encoded image
                     $productImage = $this->uploadBase64Image($imageData, $request->sku);
+                    $imageUpdated = true;
                 } else if ($imageData) {
                     $productImage = $imageData;
+                    $imageUpdated = true;
                 }
             }
             
@@ -360,8 +373,32 @@ class ProductController extends Controller
                 'category_id' => $request->category_id,
                 'is_active' => $request->boolean('is_active', true),
                 'is_featured' => $request->boolean('is_featured', false),
-                'image' => $request->image ?? $product->image
+                'image_url' => $productImage
             ]);
+            
+            // Update primary image in ProductImage table if image was updated
+            if ($imageUpdated) {
+                // Find primary image or first image
+                $primaryImage = $product->images()->where('is_primary', true)->first();
+                if (!$primaryImage) {
+                    $primaryImage = $product->images()->first();
+                }
+                
+                // Update existing image or create new one
+                if ($primaryImage) {
+                    $primaryImage->update([
+                        'image_path' => $productImage,
+                        'is_primary' => true
+                    ]);
+                } else {
+                    // Create new primary image if none exists
+                    $product->images()->create([
+                        'image_path' => $productImage,
+                        'is_primary' => true,
+                        'sort_order' => 0
+                    ]);
+                }
+            }
             
             // Create measurements if provided
             if ($request->has('measurements')) {
@@ -398,7 +435,10 @@ class ProductController extends Controller
                 }
             }
 
-            return response()->json(['message' => 'Product updated successfully', 'product' => $product->load('category', 'measurements', 'images')]);
+            // Refresh the product model to get the latest data
+            $product = Product::with('category', 'measurements', 'images')->find($product->id);
+
+            return response()->json(['message' => 'Product updated successfully', 'product' => $product]);
         } catch (\Exception $e) {
             return response()->json(['message' => 'Failed to update product: ' . $e->getMessage()], 500);
         }

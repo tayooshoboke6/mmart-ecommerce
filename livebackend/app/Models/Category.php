@@ -20,7 +20,7 @@ class Category extends Model
         'slug',
         'description',
         'parent_id',
-        'image',
+        'image_url',
         'is_active',
         'order',
         'is_featured',
