@@ -1,0 +1,1114 @@
+import React, { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
+import styled from 'styled-components';
+import ProductService from '../services/ProductService';
+import formatNaira from '../utils/formatNaira';
+
+// Styled Components
+const PageContainer = styled.div`
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  background-color: #f8f9fa;
+`;
+
+const MainContent = styled.main`
+  flex: 1;
+  max-width: 1200px;
+  width: 100%;
+  margin: 0 auto;
+  padding: 0 20px;
+  
+  @media (max-width: 768px) {
+    padding: 0 15px;
+  }
+  
+  @media (max-width: 480px) {
+    padding: 0 10px;
+  }
+`;
+
+const SectionTitle = styled.h2`
+  font-size: 28px;
+  font-weight: 700;
+  margin: 40px 0 20px;
+  color: #2E2E2E;
+  position: relative;
+  padding-left: 15px;
+  display: flex;
+  align-items: center;
+  
+  &::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    height: 28px;
+    width: 5px;
+    background-color: #3B82F6;
+    border-radius: 4px;
+  }
+  
+  @media (max-width: 768px) {
+    font-size: 24px;
+    margin: 30px 0 15px;
+  }
+  
+  @media (max-width: 480px) {
+    font-size: 22px;
+    margin: 25px 0 12px;
+  }
+`;
+
+const SectionSubtitle = styled.p`
+  font-size: 16px;
+  color: #666;
+  margin: -15px 0 25px 15px;
+  
+  @media (max-width: 768px) {
+    font-size: 14px;
+    margin: -10px 0 20px 15px;
+  }
+`;
+
+const PromoBanner = styled.div`
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.05) 0%, rgba(255, 178, 0, 0.1) 100%);
+  border-radius: 12px;
+  padding: 25px;
+  margin: 40px 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+  overflow: hidden;
+  position: relative;
+  
+  &::after {
+    content: '';
+    position: absolute;
+    top: -50%;
+    right: -50%;
+    width: 200px;
+    height: 200px;
+    background-color: rgba(255, 178, 0, 0.2);
+    border-radius: 50%;
+    z-index: 0;
+  }
+  
+  @media (max-width: 768px) {
+    flex-direction: column;
+    padding: 20px;
+    text-align: center;
+  }
+`;
+
+const PromoContent = styled.div`
+  flex: 1;
+  z-index: 1;
+`;
+
+const PromoTitle = styled.h3`
+  font-size: 24px;
+  font-weight: 700;
+  color: #2E2E2E;
+  margin: 0 0 10px;
+  
+  @media (max-width: 768px) {
+    font-size: 20px;
+  }
+`;
+
+const PromoText = styled.p`
+  font-size: 16px;
+  color: #555;
+  margin: 0 0 15px;
+  
+  @media (max-width: 768px) {
+    font-size: 14px;
+  }
+`;
+
+const PromoButton = styled(Link)`
+  background-color: #3B82F6;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  padding: 10px 20px;
+  font-weight: 600;
+  text-decoration: none;
+  display: inline-block;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 4px rgba(59, 130, 246, 0.3);
+  
+  &:hover {
+    background-color: #2563EB;
+    box-shadow: 0 4px 8px rgba(59, 130, 246, 0.4);
+    transform: translateY(-2px);
+  }
+  
+  &:active {
+    background-color: #2563EB;
+    transform: translateY(0);
+  }
+`;
+
+const PromoImage = styled.div`
+  flex: 0 0 150px;
+  height: 150px;
+  margin-left: 20px;
+  z-index: 1;
+  
+  img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+  }
+  
+  @media (max-width: 768px) {
+    margin: 20px 0 0;
+  }
+`;
+
+const SavingsTag = styled.div`
+  background-color: #FFB200;
+  color: #333;
+  font-weight: 700;
+  font-size: 14px;
+  padding: 5px 12px;
+  border-radius: 20px;
+  display: inline-block;
+  margin-bottom: 10px;
+  box-shadow: 0 2px 4px rgba(255, 178, 0, 0.3);
+`;
+
+const ProductsGrid = styled.div`
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 20px;
+  
+  @media (max-width: 1200px) {
+    grid-template-columns: repeat(4, 1fr);
+  }
+  
+  @media (max-width: 992px) {
+    grid-template-columns: repeat(3, 1fr);
+  }
+  
+  @media (max-width: 768px) {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 15px;
+  }
+  
+  @media (max-width: 480px) {
+    grid-template-columns: repeat(1, 1fr);
+  }
+`;
+
+const ProductCard = styled.div`
+  background-color: white;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.05);
+  transition: all 0.3s ease;
+  position: relative;
+  
+  &:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1);
+  }
+`;
+
+const ProductImageContainer = styled.div`
+  height: 200px;
+  background-color: #f8f9fa;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  position: relative;
+`;
+
+const ProductImage = styled.img`
+  max-height: 100%;
+  max-width: 100%;
+  object-fit: contain;
+`;
+
+const ProductInfo = styled.div`
+  padding: 15px;
+`;
+
+const ProductName = styled.h3`
+  font-size: 16px;
+  font-weight: 600;
+  color: #2E2E2E;
+  margin: 0 0 10px;
+  line-height: 1.4;
+  height: 44px;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+`;
+
+const ProductPrice = styled.div`
+  font-size: 18px;
+  font-weight: 700;
+  color: #FFB200;
+  margin-bottom: 5px;
+`;
+
+const ProductOldPrice = styled.div`
+  font-size: 14px;
+  color: #999;
+  text-decoration: line-through;
+`;
+
+const DiscountBadge = styled.div`
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 80px;
+  height: 80px;
+  overflow: hidden;
+  
+  &::before {
+    content: '${props => props.discount}% OFF';
+    position: absolute;
+    top: 12px;
+    right: -18px;
+    transform: rotate(45deg);
+    width: 80px;
+    text-align: center;
+    background-color: #dc2626;
+    color: white;
+    font-size: 8px;
+    font-weight: bold;
+    padding: 1px 0;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.2);
+  }
+`;
+
+const FeatureBadge = styled.div`
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  background-color: #10b981;
+  color: white;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 4px 8px;
+  border-radius: 4px;
+`;
+
+const AddToCartButton = styled.button`
+  background-color: #3B82F6;
+  color: white;
+  border: none;
+  border-radius: 50%;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  
+  &:hover {
+    background-color: #2563EB;
+    transform: scale(1.1);
+  }
+`;
+
+const CategorySection = styled.div`
+  margin: 40px 0;
+`;
+
+const CategoriesGrid = styled.div`
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 20px;
+  
+  @media (max-width: 1200px) {
+    grid-template-columns: repeat(4, 1fr);
+  }
+  
+  @media (max-width: 768px) {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 15px;
+  }
+  
+  @media (max-width: 480px) {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+  }
+`;
+
+const CategoryCard = styled(Link)`
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-decoration: none;
+  background-color: white;
+  border-radius: 12px;
+  padding: 20px;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.05);
+  transition: all 0.3s ease;
+  
+  &:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1);
+  }
+`;
+
+const CategoryIcon = styled.div`
+  width: 70px;
+  height: 70px;
+  background-color: rgba(59, 130, 246, 0.1);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 15px;
+  
+  img {
+    max-width: 60%;
+    max-height: 60%;
+    object-fit: contain;
+  }
+`;
+
+const CategoryName = styled.h3`
+  font-size: 16px;
+  font-weight: 600;
+  color: #2E2E2E;
+  margin: 0;
+  text-align: center;
+`;
+
+const CategoryCount = styled.p`
+  font-size: 14px;
+  color: #3B82F6;
+  margin: 5px 0 0;
+`;
+
+const BannerContainer = styled.div`
+  border-radius: 12px;
+  overflow: hidden;
+  margin-top: 20px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  position: relative;
+`;
+
+const BannerSlide = styled.div`
+  display: flex;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
+  
+  @media (max-width: 768px) {
+    flex-direction: column;
+  }
+`;
+
+const BannerContent = styled.div`
+  padding: 40px;
+  width: 50%;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  position: relative;
+  z-index: 2;
+  
+  @media (max-width: 768px) {
+    width: 100%;
+    padding: 30px 20px;
+    order: 2;
+  }
+  
+  @media (max-width: 480px) {
+    padding: 25px 15px;
+  }
+`;
+
+const BannerTitle = styled.h1`
+  font-size: 42px;
+  font-weight: 800;
+  margin: 0 0 15px;
+  color: #2E2E2E;
+  line-height: 1.2;
+  
+  @media (max-width: 768px) {
+    font-size: 32px;
+  }
+  
+  @media (max-width: 480px) {
+    font-size: 28px;
+    margin: 0 0 10px;
+  }
+`;
+
+const BannerDescription = styled.p`
+  font-size: 18px;
+  margin: 0 0 25px;
+  color: #555;
+  max-width: 90%;
+  line-height: 1.6;
+  
+  @media (max-width: 480px) {
+    font-size: 16px;
+    margin: 0 0 20px;
+  }
+`;
+
+const BannerImage = styled.div`
+  width: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  overflow: hidden;
+  
+  img {
+    max-width: 100%;
+    height: auto;
+    object-fit: cover;
+    transition: transform 0.5s ease;
+    
+    &:hover {
+      transform: scale(1.05);
+    }
+  }
+  
+  @media (max-width: 768px) {
+    min-height: 250px;
+    order: 1;
+    width: 100%;
+  }
+`;
+
+const ActionButton = styled(Link)`
+  display: inline-block;
+  background-color: #3B82F6;
+  color: white;
+  text-decoration: none;
+  padding: 12px 24px;
+  border-radius: 6px;
+  font-weight: 600;
+  font-size: 16px;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 8px rgba(59, 130, 246, 0.3);
+  
+  &:hover {
+    background-color: #2563EB;
+    transform: translateY(-3px);
+    box-shadow: 0 6px 12px rgba(59, 130, 246, 0.4);
+  }
+  
+  &:active {
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px rgba(59, 130, 246, 0.3);
+  }
+  
+  @media (max-width: 480px) {
+    padding: 10px 20px;
+    font-size: 14px;
+  }
+`;
+
+const BenefitsSection = styled.div`
+  background-color: #3B82F6;
+  padding: 40px 0;
+  margin: 60px 0;
+  
+  @media (max-width: 768px) {
+    padding: 30px 0;
+    margin: 40px 0;
+  }
+`;
+
+const BenefitsGrid = styled.div`
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 30px;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 20px;
+  
+  @media (max-width: 768px) {
+    grid-template-columns: 1fr;
+    gap: 20px;
+  }
+`;
+
+const BenefitCard = styled.div`
+  background-color: rgba(37, 99, 235, 0.2);
+  border-radius: 12px;
+  padding: 25px;
+  text-align: center;
+  color: white;
+`;
+
+const BenefitIcon = styled.div`
+  margin: 0 auto 15px;
+  width: 60px;
+  height: 60px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  
+  svg {
+    width: 100%;
+    height: 100%;
+  }
+`;
+
+const BenefitTitle = styled.h3`
+  font-size: 20px;
+  font-weight: 700;
+  margin: 0 0 10px;
+`;
+
+const BenefitText = styled.p`
+  font-size: 16px;
+  margin: 0;
+  opacity: 0.9;
+`;
+
+const Home = () => {
+  const [featuredProducts, setFeaturedProducts] = useState([]);
+  const [newArrivals, setNewArrivals] = useState([]);
+  const [bestSellers, setBestSellers] = useState([]);
+  const [categories, setCategories] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  // Mock data for fallback
+  const mockFeaturedProducts = [
+    {
+      id: 1,
+      name: "Premium Wireless Headphones",
+      slug: "premium-wireless-headphones",
+      description: "High-quality sound with noise cancellation",
+      base_price: 25000,
+      sale_price: 19999,
+      image_url: "https://via.placeholder.com/300",
+      rating: 4.5,
+      review_count: 120,
+      is_featured: true
+    },
+    {
+      id: 2,
+      name: "Smart Fitness Watch",
+      slug: "smart-fitness-watch",
+      description: "Track your fitness goals with precision",
+      base_price: 15000,
+      sale_price: 12999,
+      image_url: "https://via.placeholder.com/300",
+      rating: 4.2,
+      review_count: 85,
+      is_featured: true
+    },
+    {
+      id: 3,
+      name: "Bluetooth Portable Speaker",
+      slug: "bluetooth-portable-speaker",
+      description: "Rich sound in a compact design",
+      base_price: 8000,
+      sale_price: 6999,
+      image_url: "https://via.placeholder.com/300",
+      rating: 4.0,
+      review_count: 65,
+      is_featured: true
+    },
+    {
+      id: 4,
+      name: "4K Ultra HD Smart TV",
+      slug: "4k-ultra-hd-smart-tv",
+      description: "Immersive viewing experience",
+      base_price: 120000,
+      sale_price: 99999,
+      image_url: "https://via.placeholder.com/300",
+      rating: 4.8,
+      review_count: 200,
+      is_featured: true
+    },
+    {
+      id: 5,
+      name: "Professional DSLR Camera",
+      slug: "professional-dslr-camera",
+      description: "Capture moments with exceptional clarity",
+      base_price: 85000,
+      sale_price: 75000,
+      image_url: "https://via.placeholder.com/300",
+      rating: 4.7,
+      review_count: 150,
+      is_featured: true
+    }
+  ];
+
+  const mockNewArrivals = [
+    {
+      id: 6,
+      name: "Wireless Charging Pad",
+      slug: "wireless-charging-pad",
+      description: "Fast charging for all compatible devices",
+      base_price: 5000,
+      sale_price: 3999,
+      image_url: "https://via.placeholder.com/300",
+      rating: 4.3,
+      review_count: 45
+    },
+    {
+      id: 7,
+      name: "Smart Home Security Camera",
+      slug: "smart-home-security-camera",
+      description: "Keep your home safe with 24/7 monitoring",
+      base_price: 12000,
+      sale_price: 9999,
+      image_url: "https://via.placeholder.com/300",
+      rating: 4.4,
+      review_count: 78
+    },
+    {
+      id: 8,
+      name: "Ergonomic Office Chair",
+      slug: "ergonomic-office-chair",
+      description: "Comfortable seating for long work hours",
+      base_price: 18000,
+      sale_price: 15999,
+      image_url: "https://via.placeholder.com/300",
+      rating: 4.1,
+      review_count: 60
+    },
+    {
+      id: 9,
+      name: "Mechanical Gaming Keyboard",
+      slug: "mechanical-gaming-keyboard",
+      description: "Responsive keys for gaming precision",
+      base_price: 7000,
+      sale_price: 5999,
+      image_url: "https://via.placeholder.com/300",
+      rating: 4.6,
+      review_count: 90
+    },
+    {
+      id: 10,
+      name: "Ultrawide Curved Monitor",
+      slug: "ultrawide-curved-monitor",
+      description: "Immersive viewing for work and play",
+      base_price: 45000,
+      sale_price: 39999,
+      image_url: "https://via.placeholder.com/300",
+      rating: 4.5,
+      review_count: 110
+    }
+  ];
+
+  const mockBestSellers = [
+    {
+      id: 11,
+      name: "Smartphone Power Bank",
+      slug: "smartphone-power-bank",
+      description: "Never run out of battery on the go",
+      base_price: 3500,
+      sale_price: 2999,
+      image_url: "https://via.placeholder.com/300",
+      rating: 4.7,
+      review_count: 200
+    },
+    {
+      id: 12,
+      name: "Wireless Earbuds",
+      slug: "wireless-earbuds",
+      description: "Crystal clear sound without wires",
+      base_price: 8000,
+      sale_price: 6999,
+      image_url: "https://via.placeholder.com/300",
+      rating: 4.8,
+      review_count: 250
+    },
+    {
+      id: 13,
+      name: "Smart Doorbell",
+      slug: "smart-doorbell",
+      description: "See who's at your door from anywhere",
+      base_price: 9500,
+      sale_price: 7999,
+      image_url: "https://via.placeholder.com/300",
+      rating: 4.4,
+      review_count: 120
+    },
+    {
+      id: 14,
+      name: "Robot Vacuum Cleaner",
+      slug: "robot-vacuum-cleaner",
+      description: "Effortless cleaning for your home",
+      base_price: 25000,
+      sale_price: 19999,
+      image_url: "https://via.placeholder.com/300",
+      rating: 4.6,
+      review_count: 180
+    },
+    {
+      id: 15,
+      name: "Digital Drawing Tablet",
+      slug: "digital-drawing-tablet",
+      description: "Express your creativity digitally",
+      base_price: 15000,
+      sale_price: 12999,
+      image_url: "https://via.placeholder.com/300",
+      rating: 4.5,
+      review_count: 150
+    }
+  ];
+
+  const mockCategories = [
+    {
+      id: 1,
+      name: "Electronics",
+      slug: "electronics",
+      icon: "https://via.placeholder.com/50",
+      product_count: 120
+    },
+    {
+      id: 2,
+      name: "Computers",
+      slug: "computers",
+      icon: "https://via.placeholder.com/50",
+      product_count: 85
+    },
+    {
+      id: 3,
+      name: "Smart Home",
+      slug: "smart-home",
+      icon: "https://via.placeholder.com/50",
+      product_count: 65
+    },
+    {
+      id: 4,
+      name: "Accessories",
+      slug: "accessories",
+      icon: "https://via.placeholder.com/50",
+      product_count: 200
+    },
+    {
+      id: 5,
+      name: "Audio",
+      slug: "audio",
+      icon: "https://via.placeholder.com/50",
+      product_count: 75
+    },
+    {
+      id: 6,
+      name: "Wearables",
+      slug: "wearables",
+      icon: "https://via.placeholder.com/50",
+      product_count: 45
+    }
+  ];
+
+  // Function to fetch data from API and combine with mock data
+  const fetchHomeData = async () => {
+    setLoading(true);
+    try {
+      // Fetch featured products
+      const featuredResponse = await ProductService.getFeaturedProducts();
+      let featuredData = [];
+      if (featuredResponse && featuredResponse.data && featuredResponse.data.length > 0) {
+        featuredData = featuredResponse.data;
+      } else {
+        featuredData = mockFeaturedProducts;
+      }
+      setFeaturedProducts(featuredData);
+
+      // Fetch new arrivals
+      const newArrivalsResponse = await ProductService.getNewArrivals();
+      let newArrivalsData = [];
+      if (newArrivalsResponse && newArrivalsResponse.data && newArrivalsResponse.data.length > 0) {
+        newArrivalsData = newArrivalsResponse.data;
+      } else {
+        newArrivalsData = mockNewArrivals;
+      }
+      setNewArrivals(newArrivalsData);
+
+      // Fetch best sellers
+      const bestSellersResponse = await ProductService.getBestSellers();
+      let bestSellersData = [];
+      if (bestSellersResponse && bestSellersResponse.data && bestSellersResponse.data.length > 0) {
+        bestSellersData = bestSellersResponse.data;
+      } else {
+        bestSellersData = mockBestSellers;
+      }
+      setBestSellers(bestSellersData);
+
+      // Fetch categories
+      const categoriesResponse = await ProductService.getCategories();
+      let categoriesData = [];
+      if (categoriesResponse && categoriesResponse.data && categoriesResponse.data.length > 0) {
+        categoriesData = categoriesResponse.data;
+      } else {
+        categoriesData = mockCategories;
+      }
+      setCategories(categoriesData);
+
+      setLoading(false);
+    } catch (error) {
+      console.error("Error fetching home data:", error);
+      // Fallback to mock data if API fails
+      setFeaturedProducts(mockFeaturedProducts);
+      setNewArrivals(mockNewArrivals);
+      setBestSellers(mockBestSellers);
+      setCategories(mockCategories);
+      setError("Failed to fetch data. Using sample data instead.");
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchHomeData();
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="flex justify-center items-center h-screen">
+        <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-[#3B82F6]"></div>
+      </div>
+    );
+  }
+
+  // Calculate discount percentage
+  const calculateDiscount = (basePrice, salePrice) => {
+    if (basePrice === salePrice) return 0;
+    return Math.round(((basePrice - salePrice) / basePrice) * 100);
+  };
+
+  // Render the new design layout
+  return (
+    <PageContainer>
+      {/* Hero Banner */}
+      <BannerContainer>
+        <BannerSlide>
+          <BannerContent>
+            <SavingsTag>Special Offers</SavingsTag>
+            <BannerTitle>Discover Amazing Deals</BannerTitle>
+            <BannerDescription>
+              Shop the latest products with exclusive discounts and special promotions.
+            </BannerDescription>
+            <ActionButton to="/products">Shop Now</ActionButton>
+          </BannerContent>
+          <BannerImage>
+            <img 
+              src="https://via.placeholder.com/600x400" 
+              alt="Special offers" 
+            />
+          </BannerImage>
+        </BannerSlide>
+      </BannerContainer>
+
+      <MainContent>
+        {/* Featured Products Section */}
+        <SectionTitle>Featured Products</SectionTitle>
+        <SectionSubtitle>Handpicked items that you'll love</SectionSubtitle>
+        
+        <ProductsGrid>
+          {featuredProducts.slice(0, 5).map((product) => (
+            <ProductCard key={product.id}>
+              <ProductImageContainer>
+                <ProductImage src={product.image_url || "https://via.placeholder.com/300"} alt={product.name} />
+                {product.is_featured && <FeatureBadge>Featured</FeatureBadge>}
+                {calculateDiscount(product.base_price, product.sale_price) > 0 && (
+                  <DiscountBadge discount={calculateDiscount(product.base_price, product.sale_price)} />
+                )}
+              </ProductImageContainer>
+              <ProductInfo>
+                <div className="flex items-center mb-1">
+                  <div className="flex">
+                    {[...Array(5)].map((_, i) => (
+                      <svg key={i} xmlns="http://www.w3.org/2000/svg" className={`h-3 w-3 ${i < Math.floor(product.rating) ? 'text-yellow-400' : 'text-gray-300'}`} viewBox="0 0 20 20" fill="currentColor">
+                        <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                      </svg>
+                    ))}
+                  </div>
+                  <span className="text-xs text-gray-500 ml-1">({product.review_count})</span>
+                </div>
+                <Link to={`/products/${product.slug}`}>
+                  <ProductName>{product.name}</ProductName>
+                </Link>
+                <div className="flex justify-between items-center mt-2">
+                  <div>
+                    <ProductPrice>{formatNaira(product.sale_price)}</ProductPrice>
+                    {product.sale_price !== product.base_price && (
+                      <ProductOldPrice>{formatNaira(product.base_price)}</ProductOldPrice>
+                    )}
+                  </div>
+                  <AddToCartButton>
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                    </svg>
+                  </AddToCartButton>
+                </div>
+              </ProductInfo>
+            </ProductCard>
+          ))}
+        </ProductsGrid>
+
+        {/* New Arrivals Section */}
+        <SectionTitle>New Arrivals</SectionTitle>
+        <SectionSubtitle>The latest additions to our collection</SectionSubtitle>
+        
+        <ProductsGrid>
+          {newArrivals.slice(0, 5).map((product) => (
+            <ProductCard key={product.id}>
+              <ProductImageContainer>
+                <ProductImage src={product.image_url || "https://via.placeholder.com/300"} alt={product.name} />
+                {calculateDiscount(product.base_price, product.sale_price) > 0 && (
+                  <DiscountBadge discount={calculateDiscount(product.base_price, product.sale_price)} />
+                )}
+              </ProductImageContainer>
+              <ProductInfo>
+                <div className="flex items-center mb-1">
+                  <div className="flex">
+                    {[...Array(5)].map((_, i) => (
+                      <svg key={i} xmlns="http://www.w3.org/2000/svg" className={`h-3 w-3 ${i < Math.floor(product.rating) ? 'text-yellow-400' : 'text-gray-300'}`} viewBox="0 0 20 20" fill="currentColor">
+                        <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                      </svg>
+                    ))}
+                  </div>
+                  <span className="text-xs text-gray-500 ml-1">({product.review_count})</span>
+                </div>
+                <Link to={`/products/${product.slug}`}>
+                  <ProductName>{product.name}</ProductName>
+                </Link>
+                <div className="flex justify-between items-center mt-2">
+                  <div>
+                    <ProductPrice>{formatNaira(product.sale_price)}</ProductPrice>
+                    {product.sale_price !== product.base_price && (
+                      <ProductOldPrice>{formatNaira(product.base_price)}</ProductOldPrice>
+                    )}
+                  </div>
+                  <AddToCartButton>
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                    </svg>
+                  </AddToCartButton>
+                </div>
+              </ProductInfo>
+            </ProductCard>
+          ))}
+        </ProductsGrid>
+
+        {/* Promo Banner */}
+        <PromoBanner>
+          <PromoContent>
+            <SavingsTag>Limited Time Offer</SavingsTag>
+            <PromoTitle>Special Discount on Electronics</PromoTitle>
+            <PromoText>Get up to 30% off on selected electronics. Hurry, offer valid while stocks last!</PromoText>
+            <PromoButton to="/products/category/electronics">Shop Now</PromoButton>
+          </PromoContent>
+          <PromoImage>
+            <img src="https://via.placeholder.com/150" alt="Electronics promo" />
+          </PromoImage>
+        </PromoBanner>
+
+        {/* Best Sellers Section */}
+        <SectionTitle>Best Sellers</SectionTitle>
+        <SectionSubtitle>Our most popular products</SectionSubtitle>
+        
+        <ProductsGrid>
+          {bestSellers.slice(0, 5).map((product) => (
+            <ProductCard key={product.id}>
+              <ProductImageContainer>
+                <ProductImage src={product.image_url || "https://via.placeholder.com/300"} alt={product.name} />
+                {calculateDiscount(product.base_price, product.sale_price) > 0 && (
+                  <DiscountBadge discount={calculateDiscount(product.base_price, product.sale_price)} />
+                )}
+              </ProductImageContainer>
+              <ProductInfo>
+                <div className="flex items-center mb-1">
+                  <div className="flex">
+                    {[...Array(5)].map((_, i) => (
+                      <svg key={i} xmlns="http://www.w3.org/2000/svg" className={`h-3 w-3 ${i < Math.floor(product.rating) ? 'text-yellow-400' : 'text-gray-300'}`} viewBox="0 0 20 20" fill="currentColor">
+                        <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                      </svg>
+                    ))}
+                  </div>
+                  <span className="text-xs text-gray-500 ml-1">({product.review_count})</span>
+                </div>
+                <Link to={`/products/${product.slug}`}>
+                  <ProductName>{product.name}</ProductName>
+                </Link>
+                <div className="flex justify-between items-center mt-2">
+                  <div>
+                    <ProductPrice>{formatNaira(product.sale_price)}</ProductPrice>
+                    {product.sale_price !== product.base_price && (
+                      <ProductOldPrice>{formatNaira(product.base_price)}</ProductOldPrice>
+                    )}
+                  </div>
+                  <AddToCartButton>
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                    </svg>
+                  </AddToCartButton>
+                </div>
+              </ProductInfo>
+            </ProductCard>
+          ))}
+        </ProductsGrid>
+
+        {/* Categories Section */}
+        <SectionTitle>Shop by Category</SectionTitle>
+        <SectionSubtitle>Browse our wide range of products by category</SectionSubtitle>
+        
+        <CategoriesGrid>
+          {categories.map((category) => (
+            <CategoryCard key={category.id} to={`/products/category/${category.slug}`}>
+              <CategoryIcon>
+                <img src={category.icon || "https://via.placeholder.com/50"} alt={category.name} />
+              </CategoryIcon>
+              <CategoryName>{category.name}</CategoryName>
+              <CategoryCount>{category.product_count} Products</CategoryCount>
+            </CategoryCard>
+          ))}
+        </CategoriesGrid>
+      </MainContent>
+
+      {/* Benefits Section */}
+      <BenefitsSection>
+        <BenefitsGrid>
+          <BenefitCard>
+            <BenefitIcon>
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              </svg>
+            </BenefitIcon>
+            <BenefitTitle>Quality Products</BenefitTitle>
+            <BenefitText>We ensure all our products meet the highest standards of quality.</BenefitText>
+          </BenefitCard>
+          
+          <BenefitCard>
+            <BenefitIcon>
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </BenefitIcon>
+            <BenefitTitle>Fast Delivery</BenefitTitle>
+            <BenefitText>Get your orders delivered quickly and efficiently to your doorstep.</BenefitText>
+          </BenefitCard>
+          
+          <BenefitCard>
+            <BenefitIcon>
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+              </svg>
+            </BenefitIcon>
+            <BenefitTitle>Secure Payments</BenefitTitle>
+            <BenefitText>Your transactions are protected with the latest security measures.</BenefitText>
+          </BenefitCard>
+        </BenefitsGrid>
+      </BenefitsSection>
+    </PageContainer>
+  );
+};
+
+export default Home;

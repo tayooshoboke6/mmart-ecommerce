@@ -341,40 +341,78 @@ class ProductController extends Controller
             }
             
             // Update product
-            $slug = Str::slug($request->name);
-            
-            // Make sure base_price is not null
-            $basePrice = $requestData['base_price'] ?? $request->price ?? $product->base_price;
-            if (!$basePrice && $basePrice !== 0) {
-                return response()->json([
-                    'message' => 'Validation failed', 
-                    'errors' => ['base_price' => ['The price field is required and cannot be null.']]
-                ], 422);
-            }
-            
-            // Make sure stock_quantity is not null
-            $stockQuantity = $requestData['stock_quantity'] ?? $request->stock ?? $product->stock_quantity;
-            if (!$stockQuantity && $stockQuantity !== 0) {
-                return response()->json([
-                    'message' => 'Validation failed', 
-                    'errors' => ['stock_quantity' => ['The stock field is required and cannot be null.']]
-                ], 422);
-            }
-            
-            // Update product with validated data
-            $product->update([
+            $updateData = [
                 'name' => $request->name,
                 'slug' => $slug,
-                'description' => $request->description,
-                'base_price' => $basePrice,
-                'sale_price' => $request->sale_price,
-                'stock_quantity' => $stockQuantity,
+                'base_price' => $requestData['base_price'],
+                'stock_quantity' => $requestData['stock_quantity'],
                 'sku' => $request->sku,
                 'category_id' => $request->category_id,
                 'is_active' => $request->boolean('is_active', true),
                 'is_featured' => $request->boolean('is_featured', false),
                 'image_url' => $productImage
-            ]);
+            ];
+
+            // Only add fields if they are present in the request
+            if ($request->has('description')) {
+                $updateData['description'] = $request->description;
+            }
+            
+            if ($request->has('short_description')) {
+                $updateData['short_description'] = $request->short_description;
+            }
+            
+            if ($request->has('sale_price')) {
+                $updateData['sale_price'] = $request->sale_price;
+            }
+            
+            if ($request->has('barcode')) {
+                $updateData['barcode'] = $request->barcode;
+            }
+            
+            if ($request->has('brand')) {
+                $updateData['brand'] = $request->brand;
+            }
+            
+            if ($request->has('expiry_date')) {
+                $updateData['expiry_date'] = $request->expiry_date;
+            }
+            
+            if ($request->has('meta_data')) {
+                $updateData['meta_data'] = $request->meta_data;
+            }
+            
+            if ($request->has('total_sold')) {
+                $updateData['total_sold'] = $request->total_sold;
+            }
+            
+            // Boolean flags
+            if ($request->has('is_new_arrival')) {
+                $updateData['is_new_arrival'] = $request->boolean('is_new_arrival');
+            }
+            
+            if ($request->has('is_hot_deal')) {
+                $updateData['is_hot_deal'] = $request->boolean('is_hot_deal');
+            }
+            
+            if ($request->has('is_best_seller')) {
+                $updateData['is_best_seller'] = $request->boolean('is_best_seller');
+            }
+            
+            if ($request->has('is_expiring_soon')) {
+                $updateData['is_expiring_soon'] = $request->boolean('is_expiring_soon');
+            }
+            
+            if ($request->has('is_clearance')) {
+                $updateData['is_clearance'] = $request->boolean('is_clearance');
+            }
+            
+            if ($request->has('is_recommended')) {
+                $updateData['is_recommended'] = $request->boolean('is_recommended');
+            }
+            
+            // Update the product with the filtered data
+            $product->update($updateData);
             
             // Update primary image in ProductImage table if image was updated
             if ($imageUpdated) {
