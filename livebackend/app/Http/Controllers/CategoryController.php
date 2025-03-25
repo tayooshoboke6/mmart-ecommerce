@@ -252,10 +252,13 @@ class CategoryController extends Controller
     public function tree(Request $request)
     {
         $includeInactive = $request->has('include_inactive') && $request->user() && $request->user()->hasRole('admin');
-        $cacheKey = 'categories.tree.' . ($includeInactive ? 'with_inactive' : 'active_only');
+        
+        // Get the latest category update timestamp to use in the cache key
+        $latestUpdate = Category::max('updated_at');
+        $cacheKey = 'categories.tree.' . ($includeInactive ? 'with_inactive' : 'active_only') . '.timestamp.' . $latestUpdate;
         
         
-        $categoriesData = Cache::remember($cacheKey, 60 * 24, function () use ($includeInactive) {
+        $categoriesData = Cache::remember($cacheKey, 15, function () use ($includeInactive) {
           
             $categories = Category::with(['subcategories' => function($query) use ($includeInactive) {
                
@@ -280,7 +283,8 @@ class CategoryController extends Controller
                 'categories' => $categoriesTree,
                 'timestamp' => now()->toIso8601String(),
                 'total_count' => count($categoriesTree),
-                'cached' => true
+                'cached' => true,
+                'cache_expires_in' => '15 minutes'
             ];
         });
         

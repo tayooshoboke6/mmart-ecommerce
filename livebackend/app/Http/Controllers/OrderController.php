@@ -256,6 +256,7 @@ class OrderController extends Controller
                 $product = $cartItem->product;
                 $measurement = $cartItem->measurement;
                 $price = $product->getCurrentPrice();
+                $basePrice = $product->base_price; // Get the base price
                 
                 // Apply measurement price adjustment if applicable
                 if ($measurement && $measurement->price_adjustment) {
@@ -268,6 +269,7 @@ class OrderController extends Controller
                     'product_name' => $product->name,
                     'quantity' => $cartItem->quantity,
                     'unit_price' => $price,
+                    'base_price' => $basePrice, // Store the base price
                     'subtotal' => $price * $cartItem->quantity,
                     'product_measurement_id' => $measurement ? $measurement->id : null,
                     'measurement_unit' => $measurement ? $measurement->unit : 'unit',
@@ -558,5 +560,153 @@ class OrderController extends Controller
         }
         
         return response()->json($pickupDetails);
+    }
+
+    /**
+     * Export orders as CSV with optional filters
+     *
+     * @param Request $request
+     * @return \Symfony\Component\HttpFoundation\StreamedResponse
+     */
+    public function exportOrders(Request $request)
+    {
+        try {
+            // Log request parameters for debugging
+            \Log::info('Export orders request', [
+                'params' => $request->all(),
+                'user_agent' => $request->header('User-Agent')
+            ]);
+
+            // Get filter parameters
+            $status = $request->input('status');
+            $paymentMethod = $request->input('payment_method');
+            $search = $request->input('search');
+            $startDate = $request->input('start_date');
+            $endDate = $request->input('end_date');
+
+            \Log::info('Export filters', [
+                'status' => $status,
+                'payment_method' => $paymentMethod,
+                'search' => $search,
+                'start_date' => $startDate,
+                'end_date' => $endDate
+            ]);
+
+            // Build query with filters
+            $query = Order::with('items');
+
+            // Apply filters
+            if ($status && $status !== 'all') {
+                $query->where('status', $status);
+            }
+
+            if ($paymentMethod && $paymentMethod !== 'all') {
+                $query->where('payment_method', $paymentMethod);
+            }
+
+            if ($search) {
+                $query->where(function ($q) use ($search) {
+                    $q->where('order_number', 'like', "%{$search}%")
+                      ->orWhere('customer_name', 'like', "%{$search}%")
+                      ->orWhere('customer_email', 'like', "%{$search}%")
+                      ->orWhere('customer_phone', 'like', "%{$search}%");
+                });
+            }
+
+            if ($startDate) {
+                $query->whereDate('created_at', '>=', $startDate);
+            }
+
+            if ($endDate) {
+                $query->whereDate('created_at', '<=', $endDate);
+            }
+
+            // Order by created_at descending
+            $query->orderBy('created_at', 'desc');
+
+            // Log the SQL query for debugging
+            \Log::info('Export query', ['sql' => $query->toSql(), 'bindings' => $query->getBindings()]);
+
+            // Get all orders that match the filters
+            $orders = $query->get();
+            
+            \Log::info('Found orders for export', ['count' => $orders->count()]);
+
+            // Create CSV response
+            $headers = [
+                'Content-Type' => 'text/csv',
+                'Content-Disposition' => 'attachment; filename="orders-export-' . date('Y-m-d') . '.csv"',
+                'Pragma' => 'no-cache',
+                'Cache-Control' => 'must-revalidate, post-check=0, pre-check=0',
+                'Expires' => '0',
+            ];
+
+            $callback = function () use ($orders) {
+                $file = fopen('php://output', 'w');
+                
+                // Add CSV headers
+                fputcsv($file, [
+                    'Order ID',
+                    'Order Number',
+                    'Customer Name',
+                    'Customer Email',
+                    'Customer Phone',
+                    'Total Amount',
+                    'Payment Method',
+                    'Payment Status',
+                    'Order Status',
+                    'Items',
+                    'Created At',
+                    'Updated At'
+                ]);
+
+                // Add order data
+                foreach ($orders as $order) {
+                    try {
+                        // Format items as a string
+                        $items = $order->items->map(function ($item) {
+                            return $item->quantity . 'x ' . $item->product_name . ' (' . number_format($item->unit_price, 2) . ')';
+                        })->implode(', ');
+
+                        fputcsv($file, [
+                            $order->id,
+                            $order->order_number,
+                            $order->customer_name,
+                            $order->customer_email,
+                            $order->customer_phone ?? 'N/A',
+                            number_format($order->grand_total, 2),
+                            $order->payment_method,
+                            $order->payment_status,
+                            $order->status,
+                            $items,
+                            $order->created_at,
+                            $order->updated_at
+                        ]);
+                    } catch (\Exception $e) {
+                        \Log::error('Error processing order for CSV', [
+                            'order_id' => $order->id,
+                            'error' => $e->getMessage(),
+                            'trace' => $e->getTraceAsString()
+                        ]);
+                    }
+                }
+
+                fclose($file);
+            };
+
+            return response()->stream($callback, 200, $headers);
+        } catch (\Exception $e) {
+            \Log::error('Export orders error', [
+                'message' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            
+            return response()->json([
+                'error' => 'Export failed',
+                'message' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine()
+            ], 500);
+        }
     }
 }

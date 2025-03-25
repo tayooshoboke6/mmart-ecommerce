@@ -7,6 +7,7 @@ use App\Models\Category;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Str;
 
 class CategoryAdminController extends Controller
@@ -90,6 +91,9 @@ class CategoryAdminController extends Controller
             'is_featured' => $request->boolean('is_featured', false),
             'color' => $request->input('color', '#000000'),
         ]);
+
+        // Clear category cache
+        $this->clearCategoryCache();
 
         return response()->json([
             'message' => 'Category created successfully',
@@ -188,6 +192,9 @@ class CategoryAdminController extends Controller
             'name', 'slug', 'description', 'parent_id', 'image_url', 'is_active', 'is_featured', 'color',
         ]));
 
+        // Clear category cache
+        $this->clearCategoryCache();
+
         return response()->json([
             'message' => 'Category updated successfully',
             'category' => $category->fresh(['parent', 'subcategories']),
@@ -224,6 +231,9 @@ class CategoryAdminController extends Controller
         }
 
         $category->delete();
+
+        // Clear category cache
+        $this->clearCategoryCache();
 
         return response()->json([
             'message' => 'Category deleted successfully',
@@ -340,5 +350,26 @@ class CategoryAdminController extends Controller
         return response()->json([
             'message' => 'Categories reordered successfully',
         ]);
+    }
+
+    /**
+     * Clear all category-related cache.
+     */
+    private function clearCategoryCache()
+    {
+        // Clear all category tree cache variations
+        Cache::forget('categories.tree.with_inactive');
+        Cache::forget('categories.tree.active_only');
+        
+        // Clear any cache keys that start with categories.tree
+        $keys = Cache::get('cache_keys.categories', []);
+        foreach ($keys as $key) {
+            if (strpos($key, 'categories.tree') === 0) {
+                Cache::forget($key);
+            }
+        }
+        
+        // Log cache clearing for debugging
+        \Log::info('Category cache cleared');
     }
 }

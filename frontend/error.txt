@@ -1,0 +1,101 @@
+xport URL: http://127.0.0.1:8000/api/admin/orders/export?status=delivered
+Orders.js:519 Attempting to fetch export URL with axios...
+Orders.js:525 
+            
+            
+            GET http://127.0.0.1:8000/api/admin/orders/export?status=delivered 500 (Internal Server Error)
+dispatchXhrRequest @ xhr.js:195
+xhr @ xhr.js:15
+dispatchRequest @ dispatchRequest.js:51
+_request @ Axios.js:187
+request @ Axios.js:40
+wrap @ bind.js:5
+handleExportOrders @ Orders.js:525
+onClick @ Orders.js:655
+processDispatchQueue @ react-dom-client.development.js:16122
+(anonymous) @ react-dom-client.development.js:16725
+batchedUpdates$1 @ react-dom-client.development.js:3129
+dispatchEventForPluginEventSystem @ react-dom-client.development.js:16281
+dispatchEvent @ react-dom-client.development.js:20352
+dispatchDiscreteEvent @ react-dom-client.development.js:20320
+Orders.js:549  Export error: AxiosError {message: 'Request failed with status code 500', name: 'AxiosError', code: 'ERR_BAD_RESPONSE', config: {…}, request: XMLHttpRequest, …}
+overrideMethod @ hook.js:608
+(anonymous) @ Orders.js:549
+Promise.catch
+handleExportOrders @ Orders.js:547
+onClick @ Orders.js:655
+processDispatchQueue @ react-dom-client.development.js:16122
+(anonymous) @ react-dom-client.development.js:16725
+batchedUpdates$1 @ react-dom-client.development.js:3129
+dispatchEventForPluginEventSystem @ react-dom-client.development.js:16281
+dispatchEvent @ react-dom-client.development.js:20352
+dispatchDiscreteEvent @ react-dom-client.development.js:20320
+Orders.js:555  Error data: Blob {size: 294626, type: 'text/html'}
+overrideMethod @ hook.js:608
+(anonymous) @ Orders.js:555
+Promise.catch
+handleExportOrders @ Orders.js:547
+onClick @ Orders.js:655
+processDispatchQueue @ react-dom-client.development.js:16122
+(anonymous) @ react-dom-client.development.js:16725
+batchedUpdates$1 @ react-dom-client.development.js:3129
+dispatchEventForPluginEventSystem @ react-dom-client.development.js:16281
+dispatchEvent @ react-dom-client.development.js:20352
+dispatchDiscreteEvent @ react-dom-client.development.js:20320
+Orders.js:556  Error status: 500
+overrideMethod @ hook.js:608
+(anonymous) @ Orders.js:556
+Promise.catch
+handleExportOrders @ Orders.js:547
+onClick @ Orders.js:655
+processDispatchQueue @ react-dom-client.development.js:16122
+(anonymous) @ react-dom-client.development.js:16725
+batchedUpdates$1 @ react-dom-client.development.js:3129
+dispatchEventForPluginEventSystem @ react-dom-client.development.js:16281
+dispatchEvent @ react-dom-client.development.js:20352
+dispatchDiscreteEvent @ react-dom-client.development.js:20320
+Orders.js:557  Error headers: AxiosHeaders {cache-control: 'no-cache, private', content-type: 'text/html; charset=UTF-8'}
+overrideMethod @ hook.js:608
+(anonymous) @ Orders.js:557
+Promise.catch
+handleExportOrders @ Orders.js:547
+onClick @ Orders.js:655
+processDispatchQueue @ react-dom-client.development.js:16122
+(anonymous) @ react-dom-client.development.js:16725
+batchedUpdates$1 @ react-dom-client.development.js:3129
+dispatchEventForPluginEventSystem @ react-dom-client.development.js:16281
+dispatchEvent @ react-dom-client.development.js:20352
+dispatchDiscreteEvent @ react-dom-client.development.js:20320
+Orders.js:568  Error parsing response: <!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1"
+    />
+
+    <title>Laravel</title>
+
+    <link rel="icon" type="image/svg+xml"
+          href="data:image/svg+xml,%3Csvg viewBox='0 -.11376601 49.74245785 51.31690859' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='m49.626 11.564a.809.809 0 0 1 .028.209v10.972a.8.8 0 0 1 -.402.694l-9.209 5.302v10.509c0 .286-.152.55-.4.694l-19.223 11.066c-.044.025-.092.041-.14.058-.018.006-.035.017-.054.022a.805.805 0 0 1 -.41 0c-.022-.006-.042-.018-.063-.026-.044-.016-.09-.03-.132-.054l-19.219-11.066a.801.801 0 0 1 -.402-.694v-32.916c0-.072.01-.142.028-.21.006-.023.02-.044.028-.067.015-.042.029-.085.051-.124.015-.026.037-.047.055-.071.023-.032.044-.065.071-.093.023-.023.053-.04.079-.06.029-.024.055-.05.088-.069h.001l9.61-5.533a.802.802 0 0 1 .8 0l9.61 5.533h.002c.032.02.059.045.088.068.026.02.055.038.078.06.028.029.048.062.072.094.017.024.04.045.054.071.023.04.036.082.052.124.008.023.022.044.028.068a.809.809 0 0 1 .028.209v20.559l8.008-4.611v-10.51c0-.07.01-.141.028-.208.007-.024.02-.045.028-.068.016-.042.03-.085.052-.124.015-.026.037-.047.054-.071.024-.032.044-.065.072-.093.023-.023.052-.04.078-.06.03-.024.056-.05.088-.069h.001l9.611-5.533a.801.801 0 0 1 .8 0l9.61 5.533c.034.02.06.045.09.068.025.02.054.038.077.06.028.029.048.062.072.094.018.024.04.045.054.071.023.039.036.082.052.124.009.023.022.044.028.068zm-1.574 10.718v-9.124l-3.363 1.936-4.646 2.675v9.124l8.01-4.611zm-9.61 16.505v-9.13l-4.57 2.61-13.05 7.448v9.216zm-36.84-31.068v31.068l17.618 10.143v-9.214l-9.204-5.209-.003-.002-.004-.002c-.031-.018-.057-.044-.086-.066-.025-.02-.054-.036-.076-.058l-.002-.003c-.026-.025-.044-.056-.066-.084-.02-.027-.044-.05-.06-.078l-.001-.003c-.018-.03-.029-.066-.042-.1-.013-.03-.03-.058-.038-.09v-.001c-.01-.038-.012-.078-.016-.117-.004-.03-.012-.06-.012-.09v-21.483l-4.645-2.676-3.363-1.934zm8.81-5.994-8.007 4.609 8.005 4.609 8.006-4.61-8.006-4.608zm4.164 28.764 4.645-2.674v-20.096l-3.363 1.936-4.646 2.675v20.096zm24.667-23.325-8.006 4.609 8.006 4.609 8.005-4.61zm-.801 10.605-4.646-2.675-3.363-1.936v9.124l4.645 2.674 3.364 1.937zm-18.422 20.561 11.743-6.704 5.87-3.35-8-4.606-9.211 5.303-8.395 4.833z' fill='%23ff2d20'/%3E%3C/svg%3E" />
+
+    <link
+        href="https://fonts.bunny.net/css?family=figtree:300,400,500,600"
+        rel="stylesheet"
+    />
+
+    <style >.tippy-box[data-animation=fade][data-state=hidden]{opacity:0}[data-tippy-root]{max-width:calc(100vw - 10px)}.tippy-box{position:relative;background-color:#333;color:#fff;border-radius:4px;font-size:14px;line-height:1.4;white-space:normal;outline:0;transition-property:transform,visibility,opacity}.tippy-box[data-placement^=top]>.tippy-arrow{bottom:0}.tippy-box[data-placement^=top]>.tippy-arrow:before{bottom:-7px;left:0;border-width:8px 8px 0;border-top-color:initial;transform-origin:center top}.tippy-box[data-placement^=bottom]>.tippy-arrow{top:0}.tippy-box[data-placement^=bottom]>.tippy-arrow:before{top:-7px;left:0;border-width:0 8px 8px;border-bottom-color:initial;transform-origin:center bottom}.tippy-box[data-placement^=left]>.tippy-arrow{right:0}.tippy-box[data-placement^=left]>.tippy-arrow:before{border-width:8px 0 8px 8px;border-left-color:initial;right:-7px;transform-origin:center left}.tippy-box[data-placement^=right]>.tippy-arrow{left:0}.tippy-box[data-placement^=right]>.tippy-arrow:before{left:-7px;border-width:8px 8px 8px 0;border-right-color:initial;transform-origin:center right}.tippy-box[data-inertia][data-state=visible]{transition-timing-function:cubic-bezier(.54,1.5,.38,1.11)}.tippy-arrow{width:16px;height:16px;color:#333}.tippy-arrow:before{content:"";position:absolute;border-color:transparent;border-style:solid}.tippy-content{position:relative;padding:5px 9px;z-index:1}.tippy-box[data-theme~=material]{background-color:#505355;font-weight:600}.tippy-box[data-theme~=material][data-placement^=top]>.tippy-arrow:before{border-top-color:#505355}.tippy-box[data-theme~=material][data-placement^=bottom]>.tippy-arrow:before{border-bottom-color:#505355}.tippy-box[data-theme~=material][data-placement^=left]>.tippy-arrow:before{border-left-color:#505355}.tippy-box[data-theme~=material][data-placement^=right]>.tippy-arrow:before{border-right-color:#505355}.tippy-box[data-theme~=material]>.tippy-backdrop{background-color:#505355}.tippy-box[data-theme~=material]>.tippy-svg-arrow{fill:#505355}.tippy-box[data-animation=scale][data-placement^=top]{transform-origin:bottom}.tippy-box[data-animation=scale][data-placement^=bottom]{transform-origin:top}.tippy-box[data-animation=scale][data-placement^=left]{transform-origin:right}.tippy-box[data-animation=scale][data-placement^=right]{transform-origin:left}.tippy-box[data-animation=scale][data-state=hidden]{transform:scale(.5);opacity:0}*,:before,:after{box-sizing:border-box;border-width:0;border-style:solid;border-color:#e5e7eb}:before,:after{--tw-content: ""}htm
+overrideMethod @ hook.js:608
+reader.onload @ Orders.js:568
+FileReader
+(anonymous) @ Orders.js:572
+Promise.catch
+handleExportOrders @ Orders.js:547
+onClick @ Orders.js:655
+processDispatchQueue @ react-dom-client.development.js:16122
+(anonymous) @ react-dom-client.development.js:16725
+batchedUpdates$1 @ react-dom-client.development.js:3129
+dispatchEventForPluginEventSystem @ react-dom-client.development.js:16281
+dispatchEvent @ react-dom-client.development.js:20352
+dispatchDiscreteEvent @ react-dom-client.development.js:20320

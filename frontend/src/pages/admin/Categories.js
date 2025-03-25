@@ -3,16 +3,16 @@ import api from '../../services/api';
 
 // Mock data for categories
 const mockCategories = [
-  { id: 1, name: 'Electronics', description: 'Electronic devices and accessories', parent_id: null, product_count: 28 },
-  { id: 2, name: 'Apparel', description: 'Clothing and fashion items', parent_id: null, product_count: 45 },
-  { id: 3, name: 'Kitchen', description: 'Kitchen appliances and utensils', parent_id: null, product_count: 32 },
-  { id: 4, name: 'Accessories', description: 'Personal accessories and jewelry', parent_id: null, product_count: 19 },
-  { id: 5, name: 'Health & Fitness', description: 'Health and fitness products', parent_id: null, product_count: 24 },
-  { id: 6, name: 'Gaming', description: 'Gaming equipment and accessories', parent_id: null, product_count: 15 },
-  { id: 7, name: 'Home Decor', description: 'Home decoration items', parent_id: null, product_count: 38 },
-  { id: 8, name: 'Art & Creativity', description: 'Art supplies and creative tools', parent_id: null, product_count: 12 },
-  { id: 9, name: 'Smartphones', description: 'Mobile phones and accessories', parent_id: 1, product_count: 10 },
-  { id: 10, name: 'Laptops', description: 'Notebook computers and accessories', parent_id: 1, product_count: 8 }
+  { id: 1, name: 'Electronics', description: 'Electronic devices and accessories', parent_id: null, product_count: 28, is_active: true, is_featured: false, color: '#000000', image_url: '' },
+  { id: 2, name: 'Apparel', description: 'Clothing and fashion items', parent_id: null, product_count: 45, is_active: true, is_featured: false, color: '#000000', image_url: '' },
+  { id: 3, name: 'Kitchen', description: 'Kitchen appliances and utensils', parent_id: null, product_count: 32, is_active: true, is_featured: false, color: '#000000', image_url: '' },
+  { id: 4, name: 'Accessories', description: 'Personal accessories and jewelry', parent_id: null, product_count: 19, is_active: true, is_featured: false, color: '#000000', image_url: '' },
+  { id: 5, name: 'Health & Fitness', description: 'Health and fitness products', parent_id: null, product_count: 24, is_active: true, is_featured: false, color: '#000000', image_url: '' },
+  { id: 6, name: 'Gaming', description: 'Gaming equipment and accessories', parent_id: null, product_count: 15, is_active: true, is_featured: false, color: '#000000', image_url: '' },
+  { id: 7, name: 'Home Decor', description: 'Home decoration items', parent_id: null, product_count: 38, is_active: true, is_featured: false, color: '#000000', image_url: '' },
+  { id: 8, name: 'Art & Creativity', description: 'Art supplies and creative tools', parent_id: null, product_count: 12, is_active: true, is_featured: false, color: '#000000', image_url: '' },
+  { id: 9, name: 'Smartphones', description: 'Mobile phones and accessories', parent_id: 1, product_count: 10, is_active: true, is_featured: false, color: '#000000', image_url: '' },
+  { id: 10, name: 'Laptops', description: 'Notebook computers and accessories', parent_id: 1, product_count: 8, is_active: true, is_featured: false, color: '#000000', image_url: '' }
 ];
 
 const Categories = () => {
@@ -20,7 +20,15 @@ const Categories = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [editingCategory, setEditingCategory] = useState(null);
-  const [newCategory, setNewCategory] = useState({ name: '', description: '', parent_id: '' });
+  const [newCategory, setNewCategory] = useState({ 
+    name: '', 
+    description: '', 
+    parent_id: '', 
+    is_active: true, 
+    is_featured: false,
+    color: '#000000',
+    image_url: ''
+  });
   const [showAddForm, setShowAddForm] = useState(false);
   const [usingMockData, setUsingMockData] = useState(false);
 
@@ -53,20 +61,68 @@ const Categories = () => {
 
   const handleAddCategory = async (e) => {
     e.preventDefault();
+    console.log('Adding new category:', newCategory);
 
     try {
+      console.log('Sending create request to API...');
       const response = await api.post('/admin/categories', newCategory);
+      
+      console.log('API response:', response);
+      console.log('Response data:', response.data);
+      console.log('Response status:', response.status);
 
-      if (response.data.status === 'success') {
+      // Check if the response contains a success message
+      if (response.data.status === 'success' || (response.data.message && response.data.message.includes('success'))) {
+        console.log('Category created successfully:', response.data.category);
         // Add the new category to the local state
-        setCategories([...categories, response.data.data]);
-        setNewCategory({ name: '', description: '', parent_id: '' });
+        setCategories([...categories, response.data.category]);
+        setNewCategory({ 
+          name: '', 
+          description: '', 
+          parent_id: '', 
+          is_active: true, 
+          is_featured: false,
+          color: '#000000',
+          image_url: ''
+        });
         setShowAddForm(false);
       } else {
+        console.error('API returned non-success status:', response.data);
         throw new Error(response.data.message || 'Failed to add category');
       }
     } catch (err) {
       console.error('Error adding category:', err);
+      console.error('Error name:', err.name);
+      console.error('Error message:', err.message);
+      
+      if (err.response) {
+        console.error('Error response data:', err.response.data);
+        console.error('Error response status:', err.response.status);
+      }
+
+      // Check if the error message contains "success" which indicates a potential issue
+      if (err.message && err.message.includes('success')) {
+        console.log('Detected success in error message - this might be a false error');
+        
+        // The creation might have actually succeeded despite the error
+        try {
+          // Refresh the categories list
+          fetchCategories();
+          setNewCategory({ 
+            name: '', 
+            description: '', 
+            parent_id: '', 
+            is_active: true, 
+            is_featured: false,
+            color: '#000000',
+            image_url: ''
+          });
+          setShowAddForm(false);
+          return; // Exit early since we're handling this special case
+        } catch (refreshErr) {
+          console.error('Error refreshing categories after potential successful creation:', refreshErr);
+        }
+      }
 
       if (usingMockData) {
         // Simulate adding a category with mock data
@@ -76,11 +132,23 @@ const Categories = () => {
           name: newCategory.name,
           description: newCategory.description,
           parent_id: newCategory.parent_id || null,
-          product_count: 0
+          product_count: 0,
+          is_active: newCategory.is_active,
+          is_featured: newCategory.is_featured,
+          color: newCategory.color,
+          image_url: newCategory.image_url
         };
 
         setCategories([...categories, createdCategory]);
-        setNewCategory({ name: '', description: '', parent_id: '' });
+        setNewCategory({ 
+          name: '', 
+          description: '', 
+          parent_id: '', 
+          is_active: true, 
+          is_featured: false,
+          color: '#000000',
+          image_url: ''
+        });
         setShowAddForm(false);
       } else {
         alert('Failed to add category: ' + (err.message || 'Unknown error'));
@@ -90,21 +158,52 @@ const Categories = () => {
 
   const handleUpdateCategory = async (e) => {
     e.preventDefault();
+    console.log('Updating category:', editingCategory);
 
     try {
+      console.log('Sending update request to API...');
       const response = await api.put(`/admin/categories/${editingCategory.id}`, editingCategory);
+      
+      console.log('API response:', response);
+      console.log('Response data:', response.data);
+      console.log('Response status:', response.status);
 
-      if (response.data.status === 'success') {
+      // Check if the response contains a success message
+      if (response.data.status === 'success' || (response.data.message && response.data.message.includes('success'))) {
+        console.log('Category updated successfully:', response.data.category);
         // Update the category in the local state
         setCategories(categories.map(category =>
-          category.id === editingCategory.id ? response.data.data : category
+          category.id === editingCategory.id ? response.data.category : category
         ));
         setEditingCategory(null);
       } else {
+        console.error('API returned non-success status:', response.data);
         throw new Error(response.data.message || 'Failed to update category');
       }
     } catch (err) {
       console.error('Error updating category:', err);
+      console.error('Error name:', err.name);
+      console.error('Error message:', err.message);
+      
+      if (err.response) {
+        console.error('Error response data:', err.response.data);
+        console.error('Error response status:', err.response.status);
+      }
+
+      // Check if the error message contains "success" which indicates a potential issue
+      if (err.message && err.message.includes('success')) {
+        console.log('Detected success in error message - this might be a false error');
+        
+        // The update might have actually succeeded despite the error
+        try {
+          // Refresh the categories list
+          fetchCategories();
+          setEditingCategory(null);
+          return; // Exit early since we're handling this special case
+        } catch (refreshErr) {
+          console.error('Error refreshing categories after potential successful update:', refreshErr);
+        }
+      }
 
       if (usingMockData) {
         // Simulate updating a category with mock data
@@ -124,16 +223,45 @@ const Categories = () => {
     }
 
     try {
+      console.log('Sending delete request to API...');
       const response = await api.delete(`/admin/categories/${categoryId}`);
+      
+      console.log('API response:', response);
+      console.log('Response data:', response.data);
+      console.log('Response status:', response.status);
 
-      if (response.data.status === 'success') {
+      // Check if the response contains a success message
+      if (response.data.status === 'success' || (response.data.message && response.data.message.includes('success'))) {
+        console.log('Category deleted successfully');
         // Remove the category from the local state
         setCategories(categories.filter(category => category.id !== categoryId));
       } else {
+        console.error('API returned non-success status:', response.data);
         throw new Error(response.data.message || 'Failed to delete category');
       }
     } catch (err) {
       console.error('Error deleting category:', err);
+      console.error('Error name:', err.name);
+      console.error('Error message:', err.message);
+      
+      if (err.response) {
+        console.error('Error response data:', err.response.data);
+        console.error('Error response status:', err.response.status);
+      }
+
+      // Check if the error message contains "success" which indicates a potential issue
+      if (err.message && err.message.includes('success')) {
+        console.log('Detected success in error message - this might be a false error');
+        
+        // The deletion might have actually succeeded despite the error
+        try {
+          // Refresh the categories list
+          fetchCategories();
+          return; // Exit early since we're handling this special case
+        } catch (refreshErr) {
+          console.error('Error refreshing categories after potential successful deletion:', refreshErr);
+        }
+      }
 
       if (usingMockData) {
         // Simulate deleting a category with mock data
@@ -246,6 +374,62 @@ const Categories = () => {
                 </select>
               </div>
               
+              <div>
+                <label htmlFor="is_active" className="block text-sm font-medium text-gray-700">
+                  Is Active
+                </label>
+                <select
+                  id="is_active"
+                  value={newCategory.is_active}
+                  onChange={(e) => setNewCategory({ ...newCategory, is_active: e.target.value === 'true' })}
+                  className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-primary focus:border-primary"
+                >
+                  <option value="true">Yes</option>
+                  <option value="false">No</option>
+                </select>
+              </div>
+              
+              <div>
+                <label htmlFor="is_featured" className="block text-sm font-medium text-gray-700">
+                  Is Featured
+                </label>
+                <select
+                  id="is_featured"
+                  value={newCategory.is_featured}
+                  onChange={(e) => setNewCategory({ ...newCategory, is_featured: e.target.value === 'true' })}
+                  className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-primary focus:border-primary"
+                >
+                  <option value="true">Yes</option>
+                  <option value="false">No</option>
+                </select>
+              </div>
+              
+              <div>
+                <label htmlFor="color" className="block text-sm font-medium text-gray-700">
+                  Color
+                </label>
+                <input
+                  type="color"
+                  id="color"
+                  value={newCategory.color}
+                  onChange={(e) => setNewCategory({ ...newCategory, color: e.target.value })}
+                  className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-primary focus:border-primary"
+                />
+              </div>
+              
+              <div>
+                <label htmlFor="image_url" className="block text-sm font-medium text-gray-700">
+                  Image URL
+                </label>
+                <input
+                  type="text"
+                  id="image_url"
+                  value={newCategory.image_url}
+                  onChange={(e) => setNewCategory({ ...newCategory, image_url: e.target.value })}
+                  className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-primary focus:border-primary"
+                />
+              </div>
+              
               <div className="flex justify-end">
                 <button
                   type="button"
@@ -330,6 +514,62 @@ const Categories = () => {
                             </option>
                           ))}
                       </select>
+                    </div>
+                    
+                    <div>
+                      <label htmlFor="edit-is_active" className="block text-sm font-medium text-gray-700">
+                        Is Active
+                      </label>
+                      <select
+                        id="edit-is_active"
+                        value={editingCategory.is_active}
+                        onChange={(e) => setEditingCategory({ ...editingCategory, is_active: e.target.value === 'true' })}
+                        className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-primary focus:border-primary"
+                      >
+                        <option value="true">Yes</option>
+                        <option value="false">No</option>
+                      </select>
+                    </div>
+                    
+                    <div>
+                      <label htmlFor="edit-is_featured" className="block text-sm font-medium text-gray-700">
+                        Is Featured
+                      </label>
+                      <select
+                        id="edit-is_featured"
+                        value={editingCategory.is_featured}
+                        onChange={(e) => setEditingCategory({ ...editingCategory, is_featured: e.target.value === 'true' })}
+                        className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-primary focus:border-primary"
+                      >
+                        <option value="true">Yes</option>
+                        <option value="false">No</option>
+                      </select>
+                    </div>
+                    
+                    <div>
+                      <label htmlFor="edit-color" className="block text-sm font-medium text-gray-700">
+                        Color
+                      </label>
+                      <input
+                        type="color"
+                        id="edit-color"
+                        value={editingCategory.color}
+                        onChange={(e) => setEditingCategory({ ...editingCategory, color: e.target.value })}
+                        className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-primary focus:border-primary"
+                      />
+                    </div>
+                    
+                    <div>
+                      <label htmlFor="edit-image_url" className="block text-sm font-medium text-gray-700">
+                        Image URL
+                      </label>
+                      <input
+                        type="text"
+                        id="edit-image_url"
+                        value={editingCategory.image_url}
+                        onChange={(e) => setEditingCategory({ ...editingCategory, image_url: e.target.value })}
+                        className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-primary focus:border-primary"
+                      />
                     </div>
                   </div>
                   

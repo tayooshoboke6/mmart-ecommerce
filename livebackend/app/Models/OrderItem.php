@@ -21,6 +21,7 @@ class OrderItem extends Model
         'product_name',
         'quantity',
         'unit_price',
+        'base_price',
         'subtotal',
         'product_measurement_id',
         'measurement_unit',

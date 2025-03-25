@@ -260,11 +260,14 @@ Route::middleware(['auth:sanctum'])->prefix('admin')->group(function () {
     Route::get('/categories-tree', [\App\Http\Controllers\Admin\CategoryAdminController::class, 'tree']);
     Route::post('/categories-reorder', [\App\Http\Controllers\Admin\CategoryAdminController::class, 'reorder']);
     
-    // Order Management
-    Route::get('/orders', [AdminOrderController::class, 'index']);
-    Route::get('/orders/{id}', [AdminOrderController::class, 'show']);
-    Route::patch('/orders/{id}/status', [AdminOrderController::class, 'updateStatus']);
-    Route::get('/dashboard/order-stats', [AdminOrderController::class, 'getStats']);
+    // Admin Order Management
+    Route::prefix('orders')->group(function () {
+        Route::get('/', [AdminOrderController::class, 'index']);
+        Route::get('/export', [AdminOrderController::class, 'exportOrders']);
+        Route::get('/{id}', [AdminOrderController::class, 'show']);
+        Route::put('/{id}/status', [AdminOrderController::class, 'updateStatus']);
+    });
+    Route::get('dashboard/order-stats', [AdminOrderController::class, 'getStats']);
     
     // Coupon Management
     Route::get('/coupons', [CouponController::class, 'index']);
