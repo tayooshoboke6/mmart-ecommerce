@@ -4,6 +4,74 @@ import { useCart } from '../context/CartContext';
 import ProductService from '../services/product.service';
 import Button from '../components/ui/Button';
 import { formatNaira } from '../utils/formatters';
+import ProductCard from '../components/product/ProductCard';
+import styled from 'styled-components';
+
+// Styled component for related products section
+const RelatedProductsGrid = styled.div`
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 0.5rem;
+  
+  @media (max-width: 1200px) {
+    grid-template-columns: repeat(4, 1fr);
+  }
+  
+  @media (max-width: 1024px) {
+    grid-template-columns: repeat(3, 1fr);
+  }
+  
+  @media (max-width: 768px) {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  
+  @media (max-width: 480px) {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 0.25rem;
+  }
+  
+  /* Custom styling for product cards in related products section */
+  > div {
+    transform: scale(0.85);
+    transform-origin: top center;
+    margin-bottom: -1.5rem;
+    width: 90%;
+    margin-left: auto;
+    margin-right: auto;
+  }
+  
+  /* Adjust image height in related products */
+  div[class*="ImageContainer"] {
+    height: 120px !important;
+    
+    @media (max-width: 640px) {
+      height: 100px !important;
+    }
+  }
+  
+  /* Make product name smaller */
+  h3[class*="ProductName"] {
+    font-size: 13px !important;
+    height: 34px !important;
+    
+    @media (max-width: 768px) {
+      font-size: 12px !important;
+      height: 32px !important;
+    }
+  }
+  
+  /* Make price text smaller */
+  div[class*="PriceContainer"] span {
+    font-size: 0.9em !important;
+  }
+  
+  /* Make add to cart button smaller */
+  button[class*="AddToCartButton"] {
+    transform: scale(0.9);
+    right: 8px !important;
+    bottom: 8px !important;
+  }
+`;
 
 const ProductDetail = () => {
   const { slug } = useParams();
@@ -632,51 +700,11 @@ const ProductDetail = () => {
         {relatedProducts.length > 0 && (
           <div className="mb-8">
             <h2 className="text-2xl font-bold mb-6">Related Products</h2>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+            <RelatedProductsGrid>
               {relatedProducts.map((relatedProduct) => (
-                <div key={relatedProduct.id} className="bg-white rounded-lg shadow-md overflow-hidden">
-                  <Link to={`/products/${relatedProduct.slug}`}>
-                    <img
-                      src={relatedProduct.image}
-                      alt={relatedProduct.name}
-                      className="w-full h-48 object-cover"
-                    />
-                  </Link>
-                  <div className="p-4">
-                    <Link to={`/products/${relatedProduct.slug}`} className="block mb-2">
-                      <h3 className="text-lg font-medium text-gray-900 hover:text-primary">
-                        {relatedProduct.name}
-                      </h3>
-                    </Link>
-                    <div className="mb-2">
-                      {relatedProduct.sale_price ? (
-                        <div className="flex items-center">
-                          <span className="text-lg font-bold text-primary">
-                            {formatNaira(relatedProduct.sale_price)}
-                          </span>
-                          <span className="ml-2 text-sm text-gray-500 line-through">
-                            {formatNaira(relatedProduct.base_price)}
-                          </span>
-                        </div>
-                      ) : (
-                        <span className="text-lg font-bold text-primary">
-                          {formatNaira(relatedProduct.base_price)}
-                        </span>
-                      )}
-                    </div>
-                    <Button
-                      variant="outline"
-                      fullWidth
-                      onClick={() => {
-                        // In a real app, this would add the product to the cart
-                      }}
-                    >
-                      Add to Cart
-                    </Button>
-                  </div>
-                </div>
+                <ProductCard key={relatedProduct.id} product={relatedProduct} />
               ))}
-            </div>
+            </RelatedProductsGrid>
           </div>
         )}
       </div>
