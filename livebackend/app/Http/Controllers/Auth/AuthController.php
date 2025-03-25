@@ -116,15 +116,30 @@ class AuthController extends Controller
             'state' => 'nullable|string|max:100',
             'zip_code' => 'nullable|string|max:20',
             'profile_photo' => 'nullable|string',
+            'current_password' => 'required_with:new_password|string',
+            'new_password' => 'sometimes|string|min:8',
         ]);
 
         if ($validator->fails()) {
             return response()->json(['errors' => $validator->errors()], 422);
         }
 
+        // Update profile fields
         $user->update($request->only([
             'name', 'phone', 'address', 'city', 'state', 'zip_code', 'profile_photo'
         ]));
+
+        // Handle password update if provided
+        if ($request->has('current_password') && $request->has('new_password')) {
+            // Verify current password
+            if (!Hash::check($request->current_password, $user->password)) {
+                return response()->json(['errors' => ['current_password' => ['Current password is incorrect']]], 422);
+            }
+            
+            // Update password
+            $user->password = Hash::make($request->new_password);
+            $user->save();
+        }
 
         return response()->json([
             'message' => 'Profile updated successfully',

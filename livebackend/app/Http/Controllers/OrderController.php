@@ -319,7 +319,13 @@ class OrderController extends Controller
             $query->where('user_id', $user->id);
         }
         
-        $order = $query->findOrFail($id);
+        // Check if the ID is numeric or an order number
+        if (is_numeric($id)) {
+            $order = $query->findOrFail($id);
+        } else {
+            // If not numeric, try to find by order number
+            $order = $query->where('order_number', $id)->firstOrFail();
+        }
         
         return response()->json([
             'status' => 'success',
@@ -345,7 +351,13 @@ class OrderController extends Controller
             $query->where('user_id', $user->id);
         }
         
-        $order = $query->findOrFail($id);
+        // Check if the ID is numeric or an order number
+        if (is_numeric($id)) {
+            $order = $query->findOrFail($id);
+        } else {
+            // If not numeric, try to find by order number
+            $order = $query->where('order_number', $id)->firstOrFail();
+        }
         
         // Check if order can be cancelled
         if (!in_array($order->status, [Order::STATUS_PENDING, Order::STATUS_PROCESSING])) {

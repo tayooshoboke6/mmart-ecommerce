@@ -46,42 +46,18 @@ const OrderService = {
   // Get order details by order number
   getOrderByNumber: async (orderNumber) => {
     try {
-      // Extract the numeric ID from the order number
-      // First check if it's already a numeric ID
-      let orderId = orderNumber;
-      
-      // If it's not numeric, try to extract the ID
-      if (isNaN(parseInt(orderNumber))) {
-        // Check if the order number contains the ID at the end
-        const matches = orderNumber.match(/\d+$/);
-        if (matches && matches.length > 0) {
-          orderId = matches[0];
-        } else if (orderNumber.includes('-')) {
-          // Try to extract ID from formats like ORD-UHPD4FZTNI
-          const parts = orderNumber.split('-');
-          orderId = parts[parts.length - 1];
-        }
-      }
-      
-      console.log('Extracted order ID:', orderId);
-      
-      // Use the regular getOrder method with the extracted ID
-      const response = await api.get(`/orders/${orderId}`);
+      // Use the order number directly with the backend API
+      const response = await api.get(`/orders/${orderNumber}`);
       
       // Ensure we have a consistent response format
       let orderData = response.data;
       
-      // If the response has an 'order' property, use that
-      if (orderData.order) {
-        orderData = orderData.order;
+      // If the response has a 'data' property, use that
+      if (orderData.data) {
+        orderData = orderData.data;
       }
       
-      // Ensure order_number is set
-      if (!orderData.order_number && orderNumber) {
-        orderData.order_number = orderNumber;
-      }
-      
-      console.log('Processed order data from API:', orderData);
+      console.log('Processed order data from getOrderByNumber:', orderData);
       
       return orderData;
     } catch (error) {

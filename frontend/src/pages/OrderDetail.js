@@ -25,7 +25,7 @@ const OrderDetail = () => {
   const fetchOrderDetails = async () => {
     setLoading(true);
     try {
-      const response = await OrderService.getOrder(orderId);
+      const response = await OrderService.getOrderByNumber(orderId);
       console.log('Order details:', response);
       setOrder(response.order || response);
       setError(null);
@@ -44,6 +44,7 @@ const OrderDetail = () => {
 
     setCancelLoading(true);
     try {
+      // Use the order number for cancellation
       await OrderService.cancelOrder(orderId);
       // Refresh order details
       fetchOrderDetails();

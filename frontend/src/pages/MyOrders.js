@@ -181,7 +181,7 @@ const MyOrders = () => {
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                     <Link 
-                      to={`/orders/${order.id}`} 
+                      to={`/orders/${order.order_number}`} 
                       className="text-primary hover:text-primary-dark mr-3"
                     >
                       View Details
