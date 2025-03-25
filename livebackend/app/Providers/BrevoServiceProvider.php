@@ -31,7 +31,16 @@ class BrevoServiceProvider extends ServiceProvider
         // Register the Brevo transport
         $this->app->afterResolving(MailManager::class, function (MailManager $manager) {
             $manager->extend('brevo', function () {
-                return new BrevoTransport(config('services.brevo.key'));
+                $apiKey = env('BREVO_API_KEY') ?: config('services.brevo.key');
+                
+                // Log the API key being used
+                \Illuminate\Support\Facades\Log::info('BrevoServiceProvider: Initializing transport', [
+                    'api_key_exists' => !empty($apiKey),
+                    'api_key_length' => strlen($apiKey),
+                    'api_key_starts_with' => substr($apiKey, 0, 5)
+                ]);
+                
+                return new BrevoTransport($apiKey);
             });
         });
 

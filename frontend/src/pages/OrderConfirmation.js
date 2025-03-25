@@ -33,7 +33,18 @@ const OrderConfirmation = () => {
       }
       
       // Set the order data
-      const orderData = response.order || response;
+      let orderData = response;
+      
+      // Check if the response has a data property (from backend API)
+      if (response.data) {
+        orderData = response.data;
+      }
+      
+      // Check if the response has an order property (alternative format)
+      if (response.order) {
+        orderData = response.order;
+      }
+      
       console.log('Processed order data:', orderData);
       
       // Clear the localStorage after successful retrieval

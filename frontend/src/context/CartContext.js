@@ -2,6 +2,7 @@ import React, { createContext, useState, useEffect, useContext } from 'react';
 import CartService from '../services/cart.service';
 import api from '../services/api';
 import { useAuth } from './AuthContext';
+import { useNotification } from './NotificationContext';
 
 // Create the context
 const CartContext = createContext();
@@ -12,6 +13,7 @@ export const CartProvider = ({ children }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const { isAuthenticated } = useAuth();
+  const { showSuccess, showError } = useNotification();
 
   // Format price in Naira
   const formatPrice = (price) => {
@@ -87,10 +89,18 @@ export const CartProvider = ({ children }) => {
       const response = await CartService.addToCart(cartItem);
       console.log('CartContext addToCart - Response:', response);
       await fetchCartItems(); // Refresh cart after adding item
+      
+      // Show success notification
+      showSuccess(`${product.name} added to cart successfully!`);
+      
       return response;
     } catch (err) {
       console.error('CartContext addToCart - Error:', err);
       setError(err);
+      
+      // Show error notification
+      showError('Failed to add item to cart. Please try again.');
+      
       throw err;
     } finally {
       setLoading(false);
@@ -104,9 +114,18 @@ export const CartProvider = ({ children }) => {
     try {
       const response = await CartService.updateCartItem(itemId, quantity);
       await fetchCartItems(); // Refresh cart after update
+      
+      // Show success notification for update
+      showSuccess('Cart updated successfully!');
+      
       return response;
     } catch (err) {
+      console.error('Failed to update cart item:', err);
       setError(err);
+      
+      // Show error notification
+      showError('Failed to update cart. Please try again.');
+      
       throw err;
     } finally {
       setLoading(false);
@@ -119,10 +138,19 @@ export const CartProvider = ({ children }) => {
     setError(null);
     try {
       const response = await CartService.removeCartItem(itemId);
-      await fetchCartItems(); // Refresh cart after removing item
+      await fetchCartItems(); // Refresh cart after removal
+      
+      // Show success notification for removal
+      showSuccess('Item removed from cart!');
+      
       return response;
     } catch (err) {
+      console.error('Failed to remove cart item:', err);
       setError(err);
+      
+      // Show error notification
+      showError('Failed to remove item. Please try again.');
+      
       throw err;
     } finally {
       setLoading(false);

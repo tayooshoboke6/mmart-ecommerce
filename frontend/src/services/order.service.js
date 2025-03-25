@@ -29,6 +29,11 @@ const OrderService = {
       // Ensure we have a consistent response format
       let orderData = response.data;
       
+      // If the response has a 'data' property, use that
+      if (orderData.data) {
+        orderData = orderData.data;
+      }
+      
       // If the response has an 'order' property, use that
       if (orderData.order) {
         orderData = orderData.order;
@@ -55,6 +60,11 @@ const OrderService = {
       // If the response has a 'data' property, use that
       if (orderData.data) {
         orderData = orderData.data;
+      }
+      
+      // If the response has an 'order' property, use that
+      if (orderData.order) {
+        orderData = orderData.order;
       }
       
       console.log('Processed order data from getOrderByNumber:', orderData);

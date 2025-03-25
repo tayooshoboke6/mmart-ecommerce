@@ -119,31 +119,80 @@ const Checkout = () => {
       } else if (formData.paymentMethod === 'flutterwave') {
         try {
           // Initialize Flutterwave payment
+          const reference = generatePaymentReference();
+          
           const paymentData = {
             email: formData.email,
             amount: total,
             name: `${formData.firstName} ${formData.lastName}`,
             phone: formData.phone,
-            redirect_url: `${window.location.origin}/payment/callback`
+            redirect_url: `${window.location.origin}/payment/callback`,
+            meta: {
+              order_reference: reference,
+              customer_name: `${formData.firstName} ${formData.lastName}`,
+              shipping_address: `${formData.address}, ${formData.city}, ${formData.state}, ${formData.zipCode}`
+            }
           };
           
+          console.log('Initializing Flutterwave payment with data:', paymentData);
+          
+          // Create order data with the correct format for the backend
+          const orderWithItems = {
+            payment_method: formData.paymentMethod === 'paystack' || formData.paymentMethod === 'flutterwave' ? 'card' : 
+                            formData.paymentMethod === 'cashOnDelivery' ? 'cash_on_delivery' : formData.paymentMethod,
+            delivery_method: 'shipping',
+            shipping_address: formData.address,
+            shipping_city: formData.city,
+            shipping_state: formData.state,
+            shipping_zip: formData.zipCode,
+            shipping_phone: formData.phone,
+            customer_email: formData.email, // Add customer email from the checkout form
+            payment_reference: reference,
+            payment_status: 'pending',
+            notes: '',
+            items: cartItems.map(item => ({
+              product_id: item.product_id,
+              quantity: item.quantity,
+              unit_price: parseFloat(item.product.sale_price) || parseFloat(item.product.base_price) || 0,
+              product_name: item.product.name || 'Unknown Product',
+              measurement_unit: item.measurement?.unit || 'unit',
+              measurement_value: item.measurement?.value || '0',
+              product_measurement_id: item.measurement?.id || null
+            }))
+          };
+          
+          // Save the order first to get an order ID
+          console.log('Creating pending order for Flutterwave payment:', orderWithItems);
+          const orderResponse = await api.post('/orders', orderWithItems);
+          console.log('Pending order created successfully:', orderResponse.data);
+          
+          // Get the order ID and number from the response
+          const orderId = orderResponse.data.id || orderResponse.data.order?.id;
+          const orderNumber = orderResponse.data.order_number || orderResponse.data.order?.order_number || `ORD-${orderId}`;
+          
+          // Add order ID to payment metadata
+          paymentData.meta.order_id = orderId;
+          paymentData.meta.order_number = orderNumber;
+          
+          // Initialize Flutterwave payment
           const paymentResponse = await initializeFlutterwavePayment(paymentData);
           console.log('Flutterwave payment initialized:', paymentResponse);
           
-          if (paymentResponse && paymentResponse.data && paymentResponse.data.link) {
-            const reference = paymentResponse.data.reference;
-            
+          if (paymentResponse && paymentResponse.status === 'success' && paymentResponse.data?.link) {
             // Store order data in localStorage for retrieval after payment
             localStorage.setItem('pendingOrder', JSON.stringify({
-              orderData,
-              reference
+              orderId,
+              orderNumber,
+              reference,
+              paymentMethod: 'flutterwave'
             }));
             
             // Redirect to Flutterwave payment page
+            console.log('Redirecting to Flutterwave payment page:', paymentResponse.data.link);
             window.location.href = paymentResponse.data.link;
             return;
           } else {
-            throw new Error('Invalid payment response');
+            throw new Error('Invalid payment response: ' + JSON.stringify(paymentResponse));
           }
         } catch (error) {
           console.error('Flutterwave payment error:', error);
@@ -156,28 +205,40 @@ const Checkout = () => {
         try {
           console.log('Creating order with Cash on Delivery or other payment method');
           
-          // Add cart items to the order data
+          // Create order data with the correct format for the backend
           const orderWithItems = {
-            ...orderData,
-            items: cartItems.map(item => {
-              console.log('Processing cart item for order:', item);
-              return {
-                product_id: item.product_id,
-                quantity: item.quantity,
-                unit_price: parseFloat(item.product.sale_price) || parseFloat(item.product.base_price) || 0,
-                product_name: item.product.name || 'Unknown Product',
-                // Ensure measurement values are never null
-                measurement_unit: item.measurement && item.measurement.unit ? item.measurement.unit : 'unit',
-                measurement_value: item.measurement && item.measurement.value ? item.measurement.value : '0',
-                product_measurement_id: item.measurement && item.measurement.id ? item.measurement.id : null
-              };
-            })
+            payment_method: formData.paymentMethod === 'paystack' || formData.paymentMethod === 'flutterwave' ? 'card' : 
+                            formData.paymentMethod === 'cashOnDelivery' ? 'cash_on_delivery' : formData.paymentMethod,
+            delivery_method: 'shipping',
+            shipping_address: formData.address,
+            shipping_city: formData.city,
+            shipping_state: formData.state,
+            shipping_zip: formData.zipCode,
+            shipping_phone: formData.phone,
+            customer_email: formData.email, // Add customer email from the checkout form
+            payment_reference: '',
+            payment_status: 'pending',
+            notes: '',
+            items: cartItems.map(item => ({
+              product_id: item.product_id,
+              quantity: item.quantity,
+              unit_price: parseFloat(item.product.sale_price) || parseFloat(item.product.base_price) || 0,
+              product_name: item.product.name || 'Unknown Product',
+              measurement_unit: item.measurement?.unit || 'unit',
+              measurement_value: item.measurement?.value || '0',
+              product_measurement_id: item.measurement?.id || null
+            }))
           };
           
           console.log('Final order data being sent:', orderWithItems);
           
           const orderResponse = await api.post('/orders', orderWithItems);
           console.log('Order created successfully:', orderResponse.data);
+          
+          // Log email status for cash on delivery orders
+          if (formData.paymentMethod === 'cashOnDelivery' && orderResponse.data.email_sent) {
+            console.log(`✅ Order confirmation email sent successfully to customer email: ${formData.email}`);
+          }
           
           // Clear cart and redirect to order confirmation
           clearCart();

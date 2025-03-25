@@ -5,9 +5,11 @@ namespace App\Http\Controllers;
 use App\Models\Order;
 use App\Models\Payment;
 use App\Models\User;
+use App\Mail\OrderConfirmationMail;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Validator;
 use GuzzleHttp\Client;
 
@@ -371,13 +373,50 @@ class PaymentController extends Controller
                                     $payment->order->payment_status = 'paid';
                                     $payment->order->status = 'processing'; // Update order status to processing
                                     $payment->order->save();
-                                }
-                                
-                                // Redirect to success page
-                                if ($payment->order) {
-                                    return redirect()->route('orders.success', ['id' => $payment->order->id]);
+                                    
+                                    try {
+                                        $user = User::find($payment->order->user_id);
+                                        Log::info('Preparing to send order confirmation email', [
+                                            'order_id' => $payment->order->id,
+                                            'order_number' => $payment->order->order_number,
+                                            'user_id' => $user->id,
+                                            'user_email' => $user->email
+                                        ]);
+                                        
+                                        Mail::to($user->email)->send(new OrderConfirmationMail($payment->order));
+                                        
+                                        Log::info('Order confirmation email sent successfully', [
+                                            'order_id' => $payment->order->id,
+                                            'user_email' => $user->email
+                                        ]);
+                                        
+                                        // Set email status for frontend response
+                                        $emailSent = true;
+                                    } catch (\Exception $e) {
+                                        Log::error('Failed to send order confirmation email', [
+                                            'order_id' => $payment->order->id,
+                                            'error' => $e->getMessage(),
+                                            'trace' => $e->getTraceAsString()
+                                        ]);
+                                        
+                                        // Set email status for frontend response
+                                        $emailSent = false;
+                                    }
+                                    
+                                    Log::info('Order confirmation email sent', [
+                                        'order_id' => $payment->order->id,
+                                        'user_email' => $user->email
+                                    ]);
+                                    
+                                    // Redirect to success page
+                                    if ($payment->order) {
+                                        return redirect()->route('orders.success', ['id' => $payment->order->id]);
+                                    } else {
+                                        return redirect()->route('payment.success');
+                                    }
                                 } else {
-                                    return redirect()->route('payment.success');
+                                    return redirect()->route('payment.error')
+                                        ->with('error', 'Payment verification failed: Payment record not found');
                                 }
                             } else {
                                 Log::error('Payment record not found for transaction reference', [
@@ -424,6 +463,40 @@ class PaymentController extends Controller
                                 $payment->order->payment_status = 'paid';
                                 $payment->order->status = 'processing'; // Update order status to processing
                                 $payment->order->save();
+                                
+                                try {
+                                    $user = User::find($payment->order->user_id);
+                                    Log::info('Preparing to send order confirmation email', [
+                                        'order_id' => $payment->order->id,
+                                        'order_number' => $payment->order->order_number,
+                                        'user_id' => $user->id,
+                                        'user_email' => $user->email
+                                    ]);
+                                    
+                                    Mail::to($user->email)->send(new OrderConfirmationMail($payment->order));
+                                    
+                                    Log::info('Order confirmation email sent successfully', [
+                                        'order_id' => $payment->order->id,
+                                        'user_email' => $user->email
+                                    ]);
+                                    
+                                    // Set email status for frontend response
+                                    $emailSent = true;
+                                } catch (\Exception $e) {
+                                    Log::error('Failed to send order confirmation email', [
+                                        'order_id' => $payment->order->id,
+                                        'error' => $e->getMessage(),
+                                        'trace' => $e->getTraceAsString()
+                                    ]);
+                                    
+                                    // Set email status for frontend response
+                                    $emailSent = false;
+                                }
+                                
+                                Log::info('Order confirmation email sent', [
+                                    'order_id' => $payment->order->id,
+                                    'user_email' => $user->email
+                                ]);
                                 
                                 return redirect()->route('orders.success', ['id' => $payment->order->id]);
                             } else {
@@ -507,19 +580,48 @@ class PaymentController extends Controller
                         $order->status = 'processing'; // Update order status to processing
                         $order->save();
                         
-                        Log::info('Payment verified successfully', [
+                        try {
+                            $user = User::find($order->user_id);
+                            Log::info('Preparing to send order confirmation email', [
+                                'order_id' => $order->id,
+                                'order_number' => $order->order_number,
+                                'user_id' => $user->id,
+                                'user_email' => $user->email
+                            ]);
+                            
+                            Mail::to($user->email)->send(new OrderConfirmationMail($order));
+                            
+                            Log::info('Order confirmation email sent successfully', [
+                                'order_id' => $order->id,
+                                'user_email' => $user->email
+                            ]);
+                            
+                            // Set email status for frontend response
+                            $emailSent = true;
+                        } catch (\Exception $e) {
+                            Log::error('Failed to send order confirmation email', [
+                                'order_id' => $order->id,
+                                'error' => $e->getMessage(),
+                                'trace' => $e->getTraceAsString()
+                            ]);
+                            
+                            // Set email status for frontend response
+                            $emailSent = false;
+                        }
+                        
+                        Log::info('Order confirmation email sent', [
                             'order_id' => $order->id,
-                            'tx_ref' => $txRef,
-                            'transaction_id' => $transactionId
+                            'user_email' => $user->email
                         ]);
                         
                         return response()->json([
-                            'status' => 'success',
-                            'message' => 'Payment verified successfully',
+                            'success' => true,
+                            'message' => 'Payment successful',
                             'data' => [
                                 'order_id' => $order->id,
                                 'payment_status' => 'completed',
-                                'transaction_id' => $transactionId
+                                'transaction_id' => $transactionId,
+                                'email_sent' => $emailSent ?? false
                             ]
                         ]);
                     }
@@ -741,10 +843,38 @@ class PaymentController extends Controller
                             $order->status = 'processing'; // Update order status to processing
                             $order->save();
                             
-                            Log::info('Payment completed via webhook', [
+                            try {
+                                $user = User::find($order->user_id);
+                                Log::info('Preparing to send order confirmation email', [
+                                    'order_id' => $order->id,
+                                    'order_number' => $order->order_number,
+                                    'user_id' => $user->id,
+                                    'user_email' => $user->email
+                                ]);
+                                
+                                Mail::to($user->email)->send(new OrderConfirmationMail($order));
+                                
+                                Log::info('Order confirmation email sent successfully', [
+                                    'order_id' => $order->id,
+                                    'user_email' => $user->email
+                                ]);
+                                
+                                // Set email status for frontend response
+                                $emailSent = true;
+                            } catch (\Exception $e) {
+                                Log::error('Failed to send order confirmation email', [
+                                    'order_id' => $order->id,
+                                    'error' => $e->getMessage(),
+                                    'trace' => $e->getTraceAsString()
+                                ]);
+                                
+                                // Set email status for frontend response
+                                $emailSent = false;
+                            }
+                            
+                            Log::info('Order confirmation email sent', [
                                 'order_id' => $order->id,
-                                'tx_ref' => $txRef,
-                                'transaction_id' => $transactionId
+                                'user_email' => $user->email
                             ]);
                         }
                     } else {

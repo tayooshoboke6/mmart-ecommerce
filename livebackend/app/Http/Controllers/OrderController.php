@@ -13,6 +13,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use Illuminate\Support\Facades\Mail;
 
 class OrderController extends Controller
 {
@@ -99,6 +100,7 @@ class OrderController extends Controller
             'delivery_method' => 'required|string|in:shipping,pickup',
             'coupon_code' => 'nullable|string|exists:coupons,code',
             'notes' => 'nullable|string',
+            'customer_email' => 'nullable|email|max:255',
             'shipping_address' => 'required_if:delivery_method,shipping|string|max:255',
             'shipping_city' => 'required_if:delivery_method,shipping|string|max:100',
             'shipping_state' => 'required_if:delivery_method,shipping|string|max:100',
@@ -283,11 +285,45 @@ class OrderController extends Controller
             // Clear cart
             $user->cartItems()->delete();
             
+            // Send order confirmation email for cash on delivery orders
+            $emailSent = false;
+            if ($request->payment_method === 'cash_on_delivery') {
+                try {
+                    // Use the customer's email from the checkout form if provided, otherwise use the user's email
+                    $customerEmail = $request->customer_email ?? $user->email;
+                    
+                    \Log::info('Sending order confirmation email for cash on delivery order', [
+                        'order_id' => $order->id,
+                        'order_number' => $order->order_number,
+                        'user_email' => $user->email,
+                        'customer_email' => $customerEmail
+                    ]);
+                    
+                    Mail::to($customerEmail)->send(new \App\Mail\OrderConfirmationMail($order));
+                    
+                    \Log::info('Order confirmation email sent successfully', [
+                        'order_id' => $order->id,
+                        'customer_email' => $customerEmail
+                    ]);
+                    
+                    $emailSent = true;
+                } catch (\Exception $e) {
+                    \Log::error('Failed to send order confirmation email', [
+                        'order_id' => $order->id,
+                        'error' => $e->getMessage(),
+                        'trace' => $e->getTraceAsString()
+                    ]);
+                    
+                    $emailSent = false;
+                }
+            }
+            
             DB::commit();
             
             return response()->json([
                 'message' => 'Order created successfully',
                 'order' => $order->fresh(['items']),
+                'email_sent' => $emailSent
             ], 201);
         } catch (\Exception $e) {
             DB::rollBack();

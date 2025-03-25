@@ -55,6 +55,7 @@ Route::get('/payments/callback', [PaymentController::class, 'handleCallback'])->
 Route::get('/payment/callback', [PaymentController::class, 'handleCallback'])->name('payment.callback.alt');
 Route::get('/payments/callback/{status}', [PaymentController::class, 'handleCallback'])->name('payment.callback.status');
 Route::get('/payment/callback/{status}', [PaymentController::class, 'handleCallback'])->name('payment.callback.alt.status');
+Route::get('/payments/verify/{transactionId}', [PaymentController::class, 'verifyTransaction']);
 
 // Products & Categories (Public)
 Route::get('/products', [ProductController::class, 'index']);
@@ -82,6 +83,52 @@ Route::get('/locations/{location}', [LocationController::class, 'show'])->where(
 
 // Public notification bar
 Route::get('/notification-bar', [NotificationBarController::class, 'getActive']);
+
+// Test email route
+Route::get('/test-email', function (Request $request) {
+    try {
+        $user = \App\Models\User::first();
+        if (!$user) {
+            return response()->json(['error' => 'No users found to test email'], 404);
+        }
+        
+        // Create a test order
+        $order = \App\Models\Order::latest()->first();
+        if (!$order) {
+            return response()->json(['error' => 'No orders found to test email'], 404);
+        }
+        
+        // Log the email attempt
+        \Illuminate\Support\Facades\Log::info('Test email route called', [
+            'user_email' => $user->email,
+            'order_id' => $order->id,
+            'order_number' => $order->order_number
+        ]);
+        
+        // Send the email
+        \Illuminate\Support\Facades\Mail::to($user->email)
+            ->send(new \App\Mail\OrderConfirmationMail($order));
+        
+        return response()->json([
+            'success' => true,
+            'message' => 'Test email sent successfully',
+            'to' => $user->email,
+            'order_id' => $order->id,
+            'order_number' => $order->order_number
+        ]);
+    } catch (\Exception $e) {
+        \Illuminate\Support\Facades\Log::error('Test email failed', [
+            'error' => $e->getMessage(),
+            'trace' => $e->getTraceAsString()
+        ]);
+        
+        return response()->json([
+            'success' => false,
+            'message' => 'Failed to send test email',
+            'error' => $e->getMessage()
+        ], 500);
+    }
+});
 
 // Protected routes
 Route::middleware('auth:sanctum')->group(function () {
@@ -128,6 +175,7 @@ Route::middleware('auth:sanctum')->group(function () {
     
     // Payments
     Route::get('/payments/methods', [PaymentController::class, 'getPaymentMethods']);
+    Route::post('/payments/process', [PaymentController::class, 'processPayment']);
     Route::post('/orders/{order}/payment', [PaymentController::class, 'processPayment']);
     Route::get('/payments/{payment}/verify', [PaymentController::class, 'verifyPayment']);
     
