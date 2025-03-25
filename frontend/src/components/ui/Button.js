@@ -27,10 +27,10 @@ const Button = ({
   
   // Variant classes
   const variantClasses = {
-    primary: 'bg-primary hover:bg-primary-dark text-white focus:ring-primary',
-    secondary: 'bg-secondary hover:bg-secondary-dark text-white focus:ring-secondary',
-    outline: 'border border-gray-300 bg-transparent hover:bg-gray-50 text-gray-700 focus:ring-primary',
-    text: 'bg-transparent hover:bg-gray-100 text-gray-700 focus:ring-primary',
+    primary: 'bg-[#3B82F6] hover:bg-[#2563EB] text-white focus:ring-[#3B82F6]',
+    secondary: 'bg-[#FFB200] hover:bg-[#F59E0B] text-white focus:ring-[#FFB200]',
+    outline: 'border border-gray-300 bg-transparent hover:bg-gray-50 text-gray-700 focus:ring-[#3B82F6]',
+    text: 'bg-transparent hover:bg-gray-100 text-gray-700 focus:ring-[#3B82F6]',
     danger: 'bg-red-600 hover:bg-red-700 text-white focus:ring-red-500',
   };
   

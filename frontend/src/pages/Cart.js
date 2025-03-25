@@ -17,7 +17,13 @@ const Cart = () => {
   
   // Calculate cart totals
   const subtotal = cartItems.reduce((total, item) => {
-    const itemPrice = item.sale_price || item.base_price;
+    console.log('Calculating total for item:', item);
+    
+    // Access price from the nested product object
+    const product = item.product || {};
+    const itemPrice = parseFloat(product.sale_price) || parseFloat(product.base_price) || 0;
+    
+    console.log('Item price:', itemPrice, 'Quantity:', item.quantity, 'Total for item:', itemPrice * item.quantity);
     return total + (itemPrice * item.quantity);
   }, 0);
   
@@ -29,7 +35,7 @@ const Cart = () => {
     if (newQuantity < 1) return;
     
     const item = cartItems.find(item => item.id === itemId);
-    if (item && newQuantity <= item.stock_quantity) {
+    if (item && newQuantity <= (item.product ? item.product.stock_quantity : item.stock_quantity || 10)) {
       updateCartItem(itemId, newQuantity);
     }
   };
@@ -152,11 +158,14 @@ const Cart = () => {
                       <div key={item.id} className="p-6 flex flex-col sm:flex-row">
                         {/* Product image */}
                         <div className="sm:w-24 sm:h-24 flex-shrink-0 mb-4 sm:mb-0">
-                          <Link to={`/products/${item.slug}`}>
+                          <Link to={`/products/${item.product ? item.product.slug : `product-${item.product_id}`}`}>
                             <img 
-                              src={item.image} 
-                              alt={item.name} 
+                              src={item.product ? (item.product.image_url || item.product.image || '/placeholder.jpg') : '/placeholder.jpg'} 
+                              alt={item.product ? item.product.name : `Product #${item.product_id}`} 
                               className="w-full h-full object-cover rounded-md"
+                              onError={(e) => {
+                                e.target.src = '/placeholder.jpg';
+                              }}
                             />
                           </Link>
                         </div>
@@ -166,10 +175,10 @@ const Cart = () => {
                           <div className="flex flex-col sm:flex-row sm:justify-between">
                             <div>
                               <Link 
-                                to={`/products/${item.slug}`}
+                                to={`/products/${item.product ? item.product.slug : `product-${item.product_id}`}`}
                                 className="text-lg font-medium text-gray-900 hover:text-primary"
                               >
-                                {item.name}
+                                {item.product ? item.product.name : `Product #${item.product_id}`}
                               </Link>
                               
                               {/* Product attributes if any */}
@@ -185,18 +194,18 @@ const Cart = () => {
                               
                               {/* Price */}
                               <div className="mt-1">
-                                {item.sale_price ? (
+                                {item.product && item.product.sale_price ? (
                                   <div className="flex items-center">
                                     <span className="text-lg font-bold text-primary">
-                                      {formatNaira(item.sale_price)}
+                                      {formatNaira(item.product.sale_price)}
                                     </span>
                                     <span className="ml-2 text-sm text-gray-500 line-through">
-                                      {formatNaira(item.base_price)}
+                                      {formatNaira(item.product.base_price)}
                                     </span>
                                   </div>
                                 ) : (
                                   <span className="text-lg font-bold text-primary">
-                                    {formatNaira(item.base_price)}
+                                    {formatNaira(item.product ? item.product.base_price : 0)}
                                   </span>
                                 )}
                               </div>
@@ -204,29 +213,33 @@ const Cart = () => {
                             
                             {/* Quantity and remove */}
                             <div className="mt-4 sm:mt-0 flex flex-col sm:items-end">
-                              {/* Quantity selector */}
-                              <div className="flex items-center border border-gray-300 rounded-md">
+                              {/* Quantity controls */}
+                              <div className="flex items-center mt-4">
                                 <button
                                   onClick={() => handleQuantityChange(item.id, item.quantity - 1)}
-                                  className="px-3 py-1 text-gray-600 hover:bg-gray-100"
+                                  className="w-8 h-8 flex items-center justify-center border border-gray-300 rounded-l-md bg-gray-50 hover:bg-gray-100"
                                   disabled={item.quantity <= 1}
                                 >
-                                  -
+                                  <span className="sr-only">Decrease quantity</span>
+                                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" />
+                                  </svg>
                                 </button>
                                 <input
-                                  type="number"
+                                  type="text"
                                   value={item.quantity}
-                                  onChange={(e) => handleQuantityChange(item.id, parseInt(e.target.value, 10))}
-                                  min="1"
-                                  max={item.stock_quantity}
-                                  className="w-12 text-center py-1 border-x border-gray-300 focus:outline-none focus:ring-0"
+                                  readOnly
+                                  className="w-12 h-8 border-t border-b border-gray-300 text-center text-sm"
                                 />
                                 <button
                                   onClick={() => handleQuantityChange(item.id, item.quantity + 1)}
-                                  className="px-3 py-1 text-gray-600 hover:bg-gray-100"
-                                  disabled={item.quantity >= item.stock_quantity}
+                                  className="w-8 h-8 flex items-center justify-center border border-gray-300 rounded-r-md bg-gray-50 hover:bg-gray-100"
+                                  disabled={item.quantity >= (item.product ? item.product.stock_quantity : item.stock_quantity || 10)}
                                 >
-                                  +
+                                  <span className="sr-only">Increase quantity</span>
+                                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                                  </svg>
                                 </button>
                               </div>
                               
@@ -234,7 +247,8 @@ const Cart = () => {
                               <div className="mt-2 text-right">
                                 <span className="text-sm text-gray-500">
                                   Subtotal: <span className="font-medium text-gray-900">
-                                    {formatNaira((item.sale_price || item.base_price) * item.quantity)}
+                                    {formatNaira((item.product ? 
+                                      (parseFloat(item.product.sale_price) || parseFloat(item.product.base_price)) : 0) * item.quantity)}
                                   </span>
                                 </span>
                               </div>

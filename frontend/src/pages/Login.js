@@ -73,8 +73,8 @@ const Login = () => {
         remember: formData.remember
       });
       
-      // Redirect to previous page or home
-      navigate(from, { replace: true });
+      // Redirect to previous page or home with a page refresh to update UI
+      window.location.href = from === '/' ? '/' : from;
     } catch (err) {
       console.error('Login error:', err);
       setServerError(err.message || 'Failed to login. Please check your credentials and try again.');
@@ -85,8 +85,8 @@ const Login = () => {
     <div className="bg-gray-50 min-h-screen py-12">
       <div className="container mx-auto px-4">
         <div className="max-w-md mx-auto bg-white rounded-lg shadow-md overflow-hidden">
-          <div className="py-4 px-6 bg-primary text-white text-center">
-            <h2 className="text-2xl font-bold">Login to M-Mart<span className="text-secondary">+</span></h2>
+          <div className="py-4 px-6 bg-[#3B82F6] text-white text-center">
+            <h2 className="text-2xl font-bold">Login to M-Mart<span className="text-[#FFB200]">+</span></h2>
           </div>
           
           <div className="p-6">
@@ -110,7 +110,7 @@ const Login = () => {
                   name="email"
                   value={formData.email}
                   onChange={handleChange}
-                  className={`w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary ${
+                  className={`w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-[#3B82F6] ${
                     formErrors.email ? 'border-red-500' : 'border-gray-300'
                   }`}
                   placeholder="Enter your email"
@@ -126,7 +126,7 @@ const Login = () => {
                   <label htmlFor="password" className="block text-gray-700 font-medium">
                     Password
                   </label>
-                  <Link to="/forgot-password" className="text-sm text-primary hover:text-primary-dark">
+                  <Link to="/forgot-password" className="text-sm text-[#3B82F6] hover:text-[#2563EB]">
                     Forgot Password?
                   </Link>
                 </div>
@@ -136,7 +136,7 @@ const Login = () => {
                   name="password"
                   value={formData.password}
                   onChange={handleChange}
-                  className={`w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary ${
+                  className={`w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-[#3B82F6] ${
                     formErrors.password ? 'border-red-500' : 'border-gray-300'
                   }`}
                   placeholder="Enter your password"
@@ -154,7 +154,7 @@ const Login = () => {
                     name="remember"
                     checked={formData.remember}
                     onChange={handleChange}
-                    className="h-4 w-4 text-primary focus:ring-primary border-gray-300 rounded"
+                    className="h-4 w-4 text-[#3B82F6] focus:ring-[#3B82F6] border-gray-300 rounded"
                   />
                   <span className="ml-2 text-gray-700">Remember me</span>
                 </label>
@@ -176,7 +176,7 @@ const Login = () => {
             <div className="mt-6 text-center">
               <p className="text-gray-600">
                 Don't have an account?{' '}
-                <Link to="/register" className="text-primary hover:text-primary-dark font-medium">
+                <Link to="/register" className="text-[#3B82F6] hover:text-[#2563EB] font-medium">
                   Register
                 </Link>
               </p>

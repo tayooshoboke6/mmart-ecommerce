@@ -11,11 +11,13 @@ import ProductDetail from './pages/ProductDetail';
 import Cart from './pages/Cart';
 import Checkout from './pages/Checkout';
 import OrderSuccess from './pages/OrderSuccess';
+import OrderConfirmation from './pages/OrderConfirmation';
 import CategoryList from './pages/CategoryList';
+import MyOrders from './pages/MyOrders';
+import OrderDetail from './pages/OrderDetail';
 
 // Import pages (to be created)
 const Account = () => <div className="container mx-auto px-4 py-8">Account Coming Soon</div>;
-const Orders = () => <div className="container mx-auto px-4 py-8">Orders Coming Soon</div>;
 const NotFound = () => <div className="container mx-auto px-4 py-8">Page Not Found</div>;
 
 function App() {
@@ -33,10 +35,12 @@ function App() {
               <Route path="/cart" element={<Cart />} />
               <Route path="/checkout" element={<Checkout />} />
               <Route path="/order-success" element={<OrderSuccess />} />
+              <Route path="/order-confirmation/:orderNumber" element={<OrderConfirmation />} />
               <Route path="/login" element={<Login />} />
               <Route path="/register" element={<Register />} />
               <Route path="/account" element={<Account />} />
-              <Route path="/orders" element={<Orders />} />
+              <Route path="/orders" element={<MyOrders />} />
+              <Route path="/orders/:orderId" element={<OrderDetail />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
           </MainLayout>

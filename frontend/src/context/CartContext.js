@@ -1,5 +1,6 @@
 import React, { createContext, useState, useEffect, useContext } from 'react';
 import CartService from '../services/cart.service';
+import api from '../services/api';
 import { useAuth } from './AuthContext';
 
 // Create the context
@@ -50,7 +51,15 @@ export const CartProvider = ({ children }) => {
     setError(null);
     try {
       const response = await CartService.getCartItems();
-      setCartItems(response.cart_items || []);
+      console.log('Cart items from API:', response);
+      
+      // Set cart items directly from the API response
+      if (response && response.cart_items) {
+        console.log('Setting cart items:', response.cart_items);
+        setCartItems(response.cart_items || []);
+      } else {
+        setCartItems([]);
+      }
     } catch (err) {
       console.error('Failed to fetch cart items:', err);
       setError(err);
@@ -64,16 +73,23 @@ export const CartProvider = ({ children }) => {
     setLoading(true);
     setError(null);
     try {
+      console.log('CartContext addToCart - Product received:', product);
+      console.log('CartContext addToCart - Quantity:', quantity);
+      
       const cartItem = {
         product_id: product.id,
         quantity,
         product_measurement_id: measurementId
       };
       
+      console.log('CartContext addToCart - Cart item to be sent:', cartItem);
+      
       const response = await CartService.addToCart(cartItem);
+      console.log('CartContext addToCart - Response:', response);
       await fetchCartItems(); // Refresh cart after adding item
       return response;
     } catch (err) {
+      console.error('CartContext addToCart - Error:', err);
       setError(err);
       throw err;
     } finally {

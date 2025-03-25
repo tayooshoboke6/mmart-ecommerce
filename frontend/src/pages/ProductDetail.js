@@ -203,10 +203,9 @@ const ProductDetail = () => {
   // Handle add to cart
   const handleAddToCart = () => {
     if (product) {
-      addToCart({
-        id: product.id,
-        quantity
-      });
+      console.log('Adding product to cart:', product);
+      console.log('Quantity:', quantity);
+      addToCart(product, quantity);
     }
   };
   
@@ -373,9 +372,11 @@ const ProductDetail = () => {
               
               {/* Stock status */}
               <div className="mb-6">
-                {product.stock_quantity > 0 ? (
-                  <span className="text-green-600 font-medium">
-                    In Stock ({product.stock_quantity} available)
+              {product.stock_quantity > 0 ? (
+                  <span className={`font-medium ${product.stock_quantity <= 10 ? "text-orange-600" : "text-green-600"}`}>
+                    {product.stock_quantity <= 10 
+                      ? `Low Stock (Only ${product.stock_quantity} left)` 
+                      : "In Stock"}
                   </span>
                 ) : (
                   <span className="text-red-600 font-medium">Out of Stock</span>
@@ -450,8 +451,8 @@ const ProductDetail = () => {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
                   </svg>
                   <div>
-                    <p className="font-medium">Free delivery within Lagos</p>
-                    <p className="text-gray-500 text-sm">2-3 business days</p>
+                    <p className="font-medium">Express delivery within Lekki, Lagos</p>
+                    <p className="text-gray-500 text-sm">Under 30 minutes</p>
                   </div>
                 </div>
                 <div className="flex items-start">
@@ -460,7 +461,7 @@ const ProductDetail = () => {
                   </svg>
                   <div>
                     <p className="font-medium">Return policy</p>
-                    <p className="text-gray-500 text-sm">30 days easy return</p>
+                    <p className="text-gray-500 text-sm">Returns only for damaged goods upon delivery</p>
                   </div>
                 </div>
               </div>
@@ -480,6 +481,7 @@ const ProductDetail = () => {
               >
                 Description
               </button>
+              {/*
               <button
                 onClick={() => setActiveTab('specifications')}
                 className={`px-6 py-3 text-sm font-medium border-b-2 ${
@@ -490,6 +492,8 @@ const ProductDetail = () => {
               >
                 Specifications
               </button>
+              
+               Reviews tab 
               <button
                 onClick={() => setActiveTab('reviews')}
                 className={`px-6 py-3 text-sm font-medium border-b-2 ${
@@ -500,6 +504,7 @@ const ProductDetail = () => {
               >
                 Reviews ({product.ratings?.count})
               </button>
+              */}
             </div>
             
             <div className="p-6">

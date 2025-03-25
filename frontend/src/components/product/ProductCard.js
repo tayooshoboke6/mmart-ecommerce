@@ -16,6 +16,7 @@ const CardContainer = styled.div`
   height: 100%;
   display: flex;
   flex-direction: column;
+  width: 100%;
   
   &:hover {
     transform: translateY(-4px);
@@ -27,16 +28,20 @@ const ImageContainer = styled.div`
   position: relative;
   height: 180px;
   overflow: hidden;
-  background-color: #F5F5F5;
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 20px;
+  padding: 0;
+  
+  @media (max-width: 640px) {
+    height: 150px;
+    padding: 0;
+  }
   
   img {
-    max-width: 100%;
-    max-height: 100%;
-    object-fit: contain;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
     transition: transform 0.3s ease;
   }
   
@@ -82,8 +87,12 @@ const DealRibbon = styled.div`
   border-color: transparent #dc2626 transparent transparent;
   z-index: 2;
   
+  @media (max-width: 640px) {
+    border-width: 0 60px 60px 0;
+  }
+  
   &::after {
-    content: '20% OFF';
+    content: '${props => props.discount || "DEAL"}';
     position: absolute;
     top: 18px;
     right: -68px;
@@ -92,11 +101,18 @@ const DealRibbon = styled.div`
     font-weight: bold;
     transform: rotate(45deg);
     text-transform: uppercase;
+    
+    @media (max-width: 640px) {
+      top: 12px;
+      right: -52px;
+      font-size: 10px;
+    }
   }
 `;
 
 const CardContent = styled.div`
   padding: 16px;
+  padding-bottom: 24px;
   flex-grow: 1;
   display: flex;
   flex-direction: column;
@@ -112,6 +128,13 @@ const ProductName = styled.h3`
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
+  height: 42px; /* Fixed height for product name (2 lines) */
+  
+  @media (max-width: 768px) {
+    font-size: 14px;
+    margin: 6px 0;
+    height: 36px; /* Adjusted height for mobile */
+  }
 `;
 
 const RatingContainer = styled.div`
@@ -133,6 +156,7 @@ const ReviewCount = styled.span`
 
 const PriceContainer = styled.div`
   margin-top: auto;
+  margin-bottom: 16px;
 `;
 
 const SalePrice = styled.div`
@@ -165,6 +189,13 @@ const AddToCartButton = styled.button`
   right: 16px;
   box-shadow: 0 4px 6px rgba(59, 130, 246, 0.25);
   
+  @media (max-width: 640px) {
+    width: 36px;
+    height: 36px;
+    bottom: 12px;
+    right: 12px;
+  }
+  
   &:hover {
     background-color: #2563EB;
     transform: scale(1.1);
@@ -195,7 +226,16 @@ const ProductCard = ({ product, viewType = 'grid', showNewBadge = false }) => {
   };
   
   // Check if product has a discount
-  const hasDiscount = product.sale_price && product.sale_price < product.base_price;
+  const hasDiscount = (product.sale_price && parseFloat(product.sale_price) < parseFloat(product.base_price)) || 
+                   (product.discount_percentage && product.discount_percentage > 0);
+                   // Add this after the hasDiscount calculation
+          console.log('Product:', product.name, 
+            'Base:', product.base_price, 
+            'Sale:', product.sale_price, 
+            'HasDiscount:', hasDiscount, 
+            'Discount %:', product.discount_percentage,
+            'Base type:', typeof product.base_price,
+            'Sale type:', typeof product.sale_price);
   
   // Calculate discount percentage
   const discountPercentage = hasDiscount
@@ -248,7 +288,7 @@ const ProductCard = ({ product, viewType = 'grid', showNewBadge = false }) => {
             
             {product.is_featured && <FeaturedBadge>Featured</FeaturedBadge>}
             {showNewBadge && <NewBadge>NEW</NewBadge>}
-            {hasDiscount && <DealRibbon />}
+            {hasDiscount && <DealRibbon discount={`${discountPercentage}% OFF`} />}
           </ImageContainer>
           
           <CardContent>
@@ -282,16 +322,16 @@ const ProductCard = ({ product, viewType = 'grid', showNewBadge = false }) => {
     );
   }
   
-  // List view - simplified for now as we're focusing on the grid view
+  // List view - improved for responsive design
   return (
     <CardContainer>
-      <div style={{ display: 'flex', flexDirection: 'column', '@media (min-width: 768px)': { flexDirection: 'row' } }}>
-        <div style={{ position: 'relative', height: '180px', width: '100%', '@media (min-width: 768px)': { width: '33%' } }}>
+      <div className="flex flex-col md:flex-row">
+        <div className="relative h-[180px] w-full md:w-1/3">
           <Link to={`/products/${product.slug}`}>
             <img 
               src={product.image_url || product.image} 
               alt={product.name}
-              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+              className="w-full h-full object-cover"
               onError={(e) => {
                 e.target.onerror = null;
                 e.target.src = `https://via.placeholder.com/300x300?text=${encodeURIComponent(product.name)}`;
@@ -301,49 +341,41 @@ const ProductCard = ({ product, viewType = 'grid', showNewBadge = false }) => {
           
           {product.is_featured && <FeaturedBadge>Featured</FeaturedBadge>}
           {showNewBadge && <NewBadge>NEW</NewBadge>}
-          {hasDiscount && <DealRibbon />}
+          {hasDiscount && <DealRibbon discount={`${discountPercentage}% OFF`} />}
         </div>
         
-        <div style={{ padding: '16px', width: '100%', '@media (min-width: 768px)': { width: '67%' } }}>
-          <Link to={`/products/${product.slug}`} style={{ textDecoration: 'none' }}>
+        <div className="p-4 w-full md:w-2/3">
+          <Link to={`/products/${product.slug}`} className="no-underline">
             {renderStars()}
-            <ProductName style={{ fontSize: '18px' }}>{product.name}</ProductName>
+            <h3 className="text-base md:text-lg font-medium text-[#2E2E2E] mb-2">{product.name}</h3>
             
-            <p style={{ fontSize: '14px', color: '#4B5563', margin: '8px 0 16px', lineHeight: '1.5' }}>
+            <p className="text-sm text-gray-600 mb-4 line-clamp-2 md:line-clamp-3">
               {product.description && product.description.length > 120 
                 ? `${product.description.substring(0, 120)}...` 
                 : product.description}
             </p>
           </Link>
           
-          <div style={{ marginTop: 'auto', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div className="flex justify-between items-center mt-auto">
             <div>
-              <SalePrice style={{ fontSize: '20px' }}>{formatNaira(product.sale_price || product.base_price)}</SalePrice>
+              <div className="text-lg font-bold text-[#FFB200]">
+                {formatNaira(product.sale_price || product.base_price)}
+              </div>
               {hasDiscount && (
-                <BasePrice>{formatNaira(product.base_price)}</BasePrice>
+                <div className="text-sm text-gray-500 line-through">
+                  {formatNaira(product.base_price)}
+                </div>
               )}
             </div>
             
             <button
               onClick={handleAddToCart}
               disabled={loading || (product.stock_quantity !== undefined && product.stock_quantity <= 0)}
-              style={{
-                backgroundColor: '#3B82F6',
-                color: 'white',
-                border: 'none',
-                borderRadius: '50%',
-                width: '40px',
-                height: '40px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                cursor: 'pointer',
-                transition: 'all 0.2s ease',
-                boxShadow: '0 4px 6px rgba(59, 130, 246, 0.25)'
-              }}
+              className="w-10 h-10 bg-[#3B82F6] text-white rounded-full flex items-center justify-center hover:bg-[#2563EB] transition-all shadow-md"
+              aria-label="Add to cart"
             >
               {loading ? (
-                <span style={{ animation: 'spin 1s linear infinite' }}>⟳</span>
+                <span className="animate-spin">⟳</span>
               ) : (
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" width="20" height="20">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />

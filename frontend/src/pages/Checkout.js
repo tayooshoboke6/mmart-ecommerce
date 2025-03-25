@@ -2,11 +2,30 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
+import { formatNaira } from '../utils/format';
+import { 
+  initializePaystackPayment, 
+  initializeFlutterwavePayment, 
+  generatePaymentReference, 
+  nairaToKobo 
+} from '../utils/payment';
+import api from '../services/api';
 
 const Checkout = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { cart, cartTotal, clearCart } = useCart();
+  const { cartItems, clearCart } = useCart();
+  
+  // Calculate cart totals (same logic as in Cart.js)
+  const subtotal = cartItems.reduce((total, item) => {
+    const product = item.product || {};
+    const itemPrice = parseFloat(product.sale_price) || parseFloat(product.base_price) || 0;
+    return total + (itemPrice * item.quantity);
+  }, 0);
+  
+  const shippingFee = subtotal > 10000 ? 0 : 1500; // Free shipping for orders over ₦10,000
+  const tax = subtotal * 0.075; // 7.5% VAT
+  const total = subtotal + shippingFee + tax;
   
   const [formData, setFormData] = useState({
     firstName: user?.firstName || '',
@@ -25,10 +44,10 @@ const Checkout = () => {
   
   useEffect(() => {
     // Redirect to cart if cart is empty
-    if (cart.length === 0) {
+    if (cartItems.length === 0) {
       navigate('/cart');
     }
-  }, [cart, navigate]);
+  }, [cartItems, navigate]);
   
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -44,20 +63,168 @@ const Checkout = () => {
     setError('');
     
     try {
-      // Here you would typically make an API call to process the order
-      // For now, we'll just simulate a successful order
+      console.log('Form data:', formData);
+      console.log('Cart items:', cartItems);
+      console.log('Order totals:', { subtotal, shippingFee, tax, total });
       
-      setTimeout(() => {
-        // Clear the cart after successful order
-        clearCart();
-        
-        // Redirect to a success page
-        navigate('/order-success');
-        
-        setLoading(false);
-      }, 2000);
+      // Create the order data according to backend expectations
+      const orderData = {
+        payment_method: formData.paymentMethod === 'paystack' || formData.paymentMethod === 'flutterwave' ? 'card' : 
+                        formData.paymentMethod === 'cashOnDelivery' ? 'cash_on_delivery' : formData.paymentMethod,
+        delivery_method: 'shipping', // Could be 'pickup' if you implement that option
+        shipping_address: formData.address,
+        shipping_city: formData.city,
+        shipping_state: formData.state,
+        shipping_zip: formData.zipCode,
+        shipping_phone: formData.phone,
+        notes: '',  // Optional delivery notes
+      };
+
+      console.log('Order data being sent to API:', orderData);
+      
+      // Handle different payment methods
+      if (formData.paymentMethod === 'paystack') {
+        try {
+          // Initialize Paystack payment
+          const paymentData = {
+            email: formData.email,
+            amount: total * 100, // Convert to kobo (Naira's smallest unit)
+            callback_url: `${window.location.origin}/payment/callback`
+          };
+          
+          const paymentResponse = await initializePaystackPayment(paymentData);
+          console.log('Paystack payment initialized:', paymentResponse);
+          
+          if (paymentResponse && paymentResponse.data && paymentResponse.data.authorization_url) {
+            const reference = paymentResponse.data.reference;
+            
+            // Store order data in localStorage for retrieval after payment
+            localStorage.setItem('pendingOrder', JSON.stringify({
+              orderData,
+              reference
+            }));
+            
+            // Redirect to Paystack payment page
+            window.location.href = paymentResponse.data.authorization_url;
+            return;
+          } else {
+            throw new Error('Invalid payment response');
+          }
+        } catch (error) {
+          console.error('Paystack payment error:', error);
+          setError('Payment initialization failed: ' + (error.message || 'Unknown error'));
+          setLoading(false);
+          return;
+        }
+      } else if (formData.paymentMethod === 'flutterwave') {
+        try {
+          // Initialize Flutterwave payment
+          const paymentData = {
+            email: formData.email,
+            amount: total,
+            name: `${formData.firstName} ${formData.lastName}`,
+            phone: formData.phone,
+            redirect_url: `${window.location.origin}/payment/callback`
+          };
+          
+          const paymentResponse = await initializeFlutterwavePayment(paymentData);
+          console.log('Flutterwave payment initialized:', paymentResponse);
+          
+          if (paymentResponse && paymentResponse.data && paymentResponse.data.link) {
+            const reference = paymentResponse.data.reference;
+            
+            // Store order data in localStorage for retrieval after payment
+            localStorage.setItem('pendingOrder', JSON.stringify({
+              orderData,
+              reference
+            }));
+            
+            // Redirect to Flutterwave payment page
+            window.location.href = paymentResponse.data.link;
+            return;
+          } else {
+            throw new Error('Invalid payment response');
+          }
+        } catch (error) {
+          console.error('Flutterwave payment error:', error);
+          setError('Payment initialization failed: ' + (error.message || 'Unknown error'));
+          setLoading(false);
+          return;
+        }
+      } else {
+        // For Cash on Delivery or other payment methods, create order directly
+        try {
+          console.log('Creating order with Cash on Delivery or other payment method');
+          
+          // Add cart items to the order data
+          const orderWithItems = {
+            ...orderData,
+            items: cartItems.map(item => {
+              console.log('Processing cart item for order:', item);
+              return {
+                product_id: item.product_id,
+                quantity: item.quantity,
+                unit_price: parseFloat(item.product.sale_price) || parseFloat(item.product.base_price) || 0,
+                product_name: item.product.name || 'Unknown Product',
+                // Ensure measurement values are never null
+                measurement_unit: item.measurement && item.measurement.unit ? item.measurement.unit : 'unit',
+                measurement_value: item.measurement && item.measurement.value ? item.measurement.value : '0',
+                product_measurement_id: item.measurement && item.measurement.id ? item.measurement.id : null
+              };
+            })
+          };
+          
+          console.log('Final order data being sent:', orderWithItems);
+          
+          const orderResponse = await api.post('/orders', orderWithItems);
+          console.log('Order created successfully:', orderResponse.data);
+          
+          // Clear cart and redirect to order confirmation
+          clearCart();
+          
+          // Get the order ID from the response
+          const orderId = orderResponse.data.order.id;
+          
+          // Create a user-friendly order number format
+          const orderNumber = orderResponse.data.order.order_number || 
+                             `ORD-${orderId}`;
+          
+          // Store the order ID in localStorage for the confirmation page to use
+          localStorage.setItem('last_order_id', orderId);
+          
+          navigate(`/order-confirmation/${orderNumber}`);
+        } catch (error) {
+          console.error('Order creation error:', error);
+          if (error.response) {
+            console.error('Error response:', error.response.data);
+            setError(`Order creation failed: ${error.response.data.message || error.response.statusText}`);
+          } else {
+            setError('Order creation failed: ' + (error.message || 'Unknown error'));
+          }
+        }
+      }
+      
+      setLoading(false);
     } catch (err) {
-      setError('Failed to process your order. Please try again.');
+      console.error('Checkout error:', err);
+      
+      // Get more detailed error information if available
+      if (err.response) {
+        console.error('Error response data:', err.response.data);
+        console.error('Error response status:', err.response.status);
+        
+        // Set a more specific error message if available from the API
+        if (err.response.data && err.response.data.message) {
+          setError(err.response.data.message);
+        } else if (err.response.data && err.response.data.error) {
+          setError(err.response.data.error);
+        } else {
+          setError(`Failed to process your order (${err.response.status}). Please try again.`);
+        }
+      } else {
+        setError('Failed to process your order. Please try again.');
+      }
+      
       setLoading(false);
     }
   };
@@ -240,6 +407,21 @@ const Checkout = () => {
                 </label>
               </div>
               
+              <div className="flex items-center mb-2">
+                <input
+                  type="radio"
+                  id="flutterwave"
+                  name="paymentMethod"
+                  value="flutterwave"
+                  checked={formData.paymentMethod === 'flutterwave'}
+                  onChange={handleChange}
+                  className="h-4 w-4 text-primary focus:ring-primary border-gray-300"
+                />
+                <label htmlFor="flutterwave" className="ml-2 block text-sm font-medium text-gray-700">
+                  Flutterwave
+                </label>
+              </div>
+              
               <div className="flex items-center">
                 <input
                   type="radio"
@@ -277,13 +459,13 @@ const Checkout = () => {
           <h2 className="text-xl font-semibold mb-4">Order Summary</h2>
           
           <div className="border-b pb-4 mb-4">
-            {cart.map((item) => (
+            {cartItems.map((item) => (
               <div key={item.id} className="flex justify-between items-center mb-2">
                 <div className="flex items-center">
                   <span className="font-medium">{item.quantity} x</span>
-                  <span className="ml-2">{item.name}</span>
+                  <span className="ml-2">{item.product.name}</span>
                 </div>
-                <span>₦{(item.price * item.quantity).toLocaleString()}</span>
+                <span>{formatNaira((parseFloat(item.product.sale_price) || parseFloat(item.product.base_price) || 0) * item.quantity)}</span>
               </div>
             ))}
           </div>
@@ -291,21 +473,21 @@ const Checkout = () => {
           <div className="border-b pb-4 mb-4">
             <div className="flex justify-between mb-2">
               <span>Subtotal</span>
-              <span>₦{cartTotal.toLocaleString()}</span>
+              <span>{formatNaira(subtotal)}</span>
             </div>
             <div className="flex justify-between mb-2">
               <span>Shipping</span>
-              <span>₦1,500.00</span>
+              <span>{formatNaira(shippingFee)}</span>
             </div>
             <div className="flex justify-between">
               <span>Tax (7.5%)</span>
-              <span>₦{(cartTotal * 0.075).toLocaleString()}</span>
+              <span>{formatNaira(tax)}</span>
             </div>
           </div>
           
           <div className="flex justify-between font-bold text-lg">
             <span>Total</span>
-            <span>₦{(cartTotal + 1500 + (cartTotal * 0.075)).toLocaleString()}</span>
+            <span>{formatNaira(total)}</span>
           </div>
         </div>
       </div>

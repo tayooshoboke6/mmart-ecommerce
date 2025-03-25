@@ -14,9 +14,12 @@ const CartService = {
   // Add item to cart
   addToCart: async (item) => {
     try {
+      console.log('CartService addToCart - Item to be sent to API:', item);
       const response = await api.post('/cart/add', item);
+      console.log('CartService addToCart - API response:', response.data);
       return response.data;
     } catch (error) {
+      console.error('CartService addToCart - API error:', error);
       throw error.response ? error.response.data : error;
     }
   },

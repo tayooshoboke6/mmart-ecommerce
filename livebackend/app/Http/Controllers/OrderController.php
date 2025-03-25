@@ -268,8 +268,8 @@ class OrderController extends Controller
                     'unit_price' => $price,
                     'subtotal' => $price * $cartItem->quantity,
                     'product_measurement_id' => $measurement ? $measurement->id : null,
-                    'measurement_unit' => $measurement ? $measurement->unit : null,
-                    'measurement_value' => $measurement ? $measurement->value : null,
+                    'measurement_unit' => $measurement ? $measurement->unit : 'unit',
+                    'measurement_value' => $measurement ? $measurement->value : '0',
                 ]);
                 
                 // Update stock
