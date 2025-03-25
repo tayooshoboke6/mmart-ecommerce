@@ -90,11 +90,11 @@ class UserController extends Controller
             $users = $query->paginate($perPage, ['*'], 'page', $page);
             
             // Enhance user data with additional information
-            $enhancedUsers = $users->map(function($user) {
-                $orderCount = Order::where('user_id', $user->id)->count();
-                $lastActive = $user->last_login_at ?? $user->updated_at;
+            $enhancedUsers = $users->map(function ($user) {
+                // Get the last login time
+                $lastActive = $user->last_login_at ? new \Carbon\Carbon($user->last_login_at) : null;
                 
-                // Determine activity level based on login frequency or order count
+                // Calculate activity level
                 $activityLevel = 'low';
                 if ($lastActive && $lastActive->diffInDays(now()) < 7) {
                     $activityLevel = 'high';
@@ -102,17 +102,43 @@ class UserController extends Controller
                     $activityLevel = 'medium';
                 }
                 
+                // Get order count
+                $orderCount = \App\Models\Order::where('user_id', $user->id)->count();
+                
+                // Get completed and pending order counts
+                $completedOrderCount = \App\Models\Order::where('user_id', $user->id)
+                    ->where('status', \App\Models\Order::STATUS_COMPLETED)
+                    ->count();
+                
+                $pendingOrderCount = \App\Models\Order::where('user_id', $user->id)
+                    ->whereIn('status', [\App\Models\Order::STATUS_PENDING, \App\Models\Order::STATUS_PROCESSING])
+                    ->count();
+                
+                // Calculate total spent
+                $totalSpent = \App\Models\Order::where('user_id', $user->id)
+                    ->where('payment_status', \App\Models\Order::PAYMENT_PAID)
+                    ->sum('grand_total');
+                
                 return [
                     'id' => $user->id,
                     'name' => $user->name,
                     'email' => $user->email,
+                    'email_verified' => $user->email_verified_at !== null,
+                    'phone' => $user->phone ?? 'Not provided',
                     'role' => $user->role,
-                    'status' => $user->is_active ? 'active' : 'inactive',
+                    'status' => $user->status,
                     'location' => $user->city && $user->state ? "{$user->city}, {$user->state}" : 'Not specified',
+                    'address' => $user->address ?? 'Not provided',
+                    'city' => $user->city ?? 'Not provided',
+                    'state' => $user->state ?? 'Not provided',
+                    'zip_code' => $user->zip_code ?? 'Not provided',
                     'created_at' => $user->created_at->format('Y-m-d'),
                     'last_active' => $lastActive ? $lastActive->format('Y-m-d') : null,
                     'activity_level' => $activityLevel,
                     'order_count' => $orderCount,
+                    'completed_order_count' => $completedOrderCount,
+                    'pending_order_count' => $pendingOrderCount,
+                    'total_spent' => $totalSpent,
                     'profile_photo' => $user->profile_photo
                 ];
             });
@@ -203,21 +229,39 @@ class UserController extends Controller
             $user = User::findOrFail($id);
             $orderCount = Order::where('user_id', $user->id)->count();
             
+            // Get completed and pending order counts
+            $completedOrderCount = Order::where('user_id', $user->id)
+                ->where('status', Order::STATUS_COMPLETED)
+                ->count();
+            
+            $pendingOrderCount = Order::where('user_id', $user->id)
+                ->whereIn('status', [Order::STATUS_PENDING, Order::STATUS_PROCESSING])
+                ->count();
+            
+            // Calculate total spent
+            $totalSpent = Order::where('user_id', $user->id)
+                ->where('payment_status', Order::PAYMENT_PAID)
+                ->sum('grand_total');
+            
             return response()->json([
                 'status' => 'success',
                 'data' => [
                     'id' => $user->id,
                     'name' => $user->name,
                     'email' => $user->email,
+                    'email_verified' => $user->email_verified_at !== null,
                     'role' => $user->role,
                     'phone' => $user->phone,
                     'address' => $user->address,
                     'city' => $user->city,
                     'state' => $user->state,
                     'zip_code' => $user->zip_code,
-                    'status' => $user->is_active ? 'active' : 'inactive',
+                    'status' => $user->status,
                     'created_at' => $user->created_at->format('Y-m-d'),
                     'order_count' => $orderCount,
+                    'completed_order_count' => $completedOrderCount,
+                    'pending_order_count' => $pendingOrderCount,
+                    'total_spent' => $totalSpent,
                     'profile_photo' => $user->profile_photo
                 ]
             ]);
@@ -347,7 +391,7 @@ class UserController extends Controller
     }
     
     /**
-     * Update user status (active/inactive)
+     * Update user status (active/inactive/suspended)
      */
     public function updateStatus(Request $request, $id)
     {
@@ -355,7 +399,7 @@ class UserController extends Controller
             $user = User::findOrFail($id);
             
             $validator = Validator::make($request->all(), [
-                'status' => 'required|string|in:active,inactive',
+                'status' => 'required|string|in:active,inactive,suspended',
             ]);
             
             if ($validator->fails()) {
@@ -369,11 +413,12 @@ class UserController extends Controller
             // Log the request data for debugging
             \Log::info('User status update request data:', $request->all());
             
-            // Convert status string to boolean
-            $is_active = $request->status === 'active';
+            // Update the status field
+            $user->status = $request->status;
             
-            // Update only the is_active field
-            $user->is_active = $is_active;
+            // Also update is_active for backward compatibility
+            $user->is_active = ($request->status === User::STATUS_ACTIVE);
+            
             $user->save();
             
             return response()->json([
@@ -381,7 +426,7 @@ class UserController extends Controller
                 'message' => 'User status updated successfully',
                 'data' => [
                     'id' => $user->id,
-                    'status' => $request->status
+                    'status' => $user->status
                 ]
             ]);
         } catch (\Exception $e) {

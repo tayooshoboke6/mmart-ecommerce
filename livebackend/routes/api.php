@@ -313,7 +313,7 @@ Route::middleware(['auth:sanctum'])->prefix('admin')->group(function () {
     Route::get('/users/{id}', [\App\Http\Controllers\Admin\UserController::class, 'show']);
     Route::put('/users/{id}', [\App\Http\Controllers\Admin\UserController::class, 'update']);
     Route::delete('/users/{id}', [\App\Http\Controllers\Admin\UserController::class, 'destroy']);
-    Route::patch('/users/{id}/status', [\App\Http\Controllers\Admin\UserController::class, 'updateStatus']);
+    Route::put('/users/{id}/status', [\App\Http\Controllers\Admin\UserController::class, 'updateStatus']);
 });
 
 // Debug route (temporary)

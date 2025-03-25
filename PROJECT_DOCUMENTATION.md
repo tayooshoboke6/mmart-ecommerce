@@ -8,6 +8,7 @@ M-Mart+ is a Nigerian e-commerce platform designed to provide a seamless shoppin
 - **Backend**: Laravel (PHP)
 - **Database**: MySQL
 - **API**: RESTful API architecture
+- **Email**: Brevo (SendinBlue) for transactional emails
 
 ## Completed Work
 
@@ -26,6 +27,25 @@ M-Mart+ is a Nigerian e-commerce platform designed to provide a seamless shoppin
   - Category management
   - Featured products, new arrivals, and best sellers
   - User authentication and profile management
+
+#### Email Notifications
+- ✅ Implemented order confirmation emails for all payment methods:
+  - ✅ Integrated with Brevo (SendinBlue) for reliable email delivery
+  - ✅ Created email templates with proper Nigerian Naira (₦) formatting
+  - ✅ Added order details and product information in confirmation emails
+  - ✅ Ensured emails are sent to the customer's checkout email (not just registered user email)
+  - ✅ Fixed order details URL in emails to correctly link to the frontend
+
+#### Cash Payment Email Notifications
+- ✅ Implemented email notifications for cash payments:
+  - ✅ Sent email to customers with payment instructions
+  - ✅ Included order details and payment amount in email
+  - ✅ Added option for customers to confirm payment receipt
+
+#### Order Confirmation URLs
+- ✅ Implemented order confirmation URLs in email notifications:
+  - ✅ Generated unique URL for each order
+  - ✅ Redirected customers to order details page after confirmation
 
 ### Frontend Development
 
@@ -65,6 +85,14 @@ M-Mart+ is a Nigerian e-commerce platform designed to provide a seamless shoppin
   - Pagination
   - Grid/List view options
 
+#### Checkout and Payment
+- ✅ Implemented multi-step checkout process
+- ✅ Added support for multiple payment methods:
+  - ✅ Credit/Debit Card (via Paystack and Flutterwave)
+  - ✅ Cash on Delivery
+- ✅ Implemented order confirmation and email notification system
+- ✅ Added console logging for payment and email status tracking
+
 ### Bug Fixes
 1. **Price Display Issues**:
    - ✅ Fixed issues with product prices showing as 0.00 instead of actual prices
@@ -75,25 +103,30 @@ M-Mart+ is a Nigerian e-commerce platform designed to provide a seamless shoppin
    - ✅ Added proper field mapping between backend and frontend
    - ✅ Implemented computed properties for discount percentages and stock status
 
+3. **Email Notification Issues**:
+   - ✅ Fixed issue with emails not being sent to the checkout email address
+   - ✅ Corrected the order details URL in confirmation emails
+   - ✅ Improved email delivery tracking and logging
+
 ## Milestones to Production
 
 ### 1. Critical Features to Complete
 
 #### Backend
-- 🕒 **User Authentication System**:
-  - 🕒 Complete user registration and login functionality
-  - 🕒 Implement password reset flow
+- ✅ **User Authentication System**:
+  - ✅ Complete user registration and login functionality
+  - ✅ Implement password reset flow
   - 🕒 Add social authentication options
 
-- 🕒 **Order Management**:
-  - 🕒 Implement order creation and processing
-  - 🕒 Add order status tracking
-  - 🕒 Create order history for users
+- ✅ **Order Management**:
+  - ✅ Implement order creation and processing
+  - ✅ Add order status tracking
+  - ✅ Create order history for users
 
-- 🕒 **Payment Integration**:
-  - 🕒 Integrate with Nigerian payment gateways (Paystack, Flutterwave)
-  - 🕒 Implement payment verification
-  - 🕒 Add support for multiple payment methods
+- ✅ **Payment Integration**:
+  - ✅ Integrate with Nigerian payment gateways (Paystack, Flutterwave)
+  - ✅ Implement payment verification
+  - ✅ Add support for multiple payment methods
 
 - 🕒 **Inventory Management**:
   - 🕒 Implement stock tracking system
@@ -101,25 +134,25 @@ M-Mart+ is a Nigerian e-commerce platform designed to provide a seamless shoppin
   - 🕒 Create inventory reports
 
 #### Frontend
-- 🕒 **Shopping Cart**:
-  - 🕒 Complete cart functionality
-  - 🕒 Add quantity adjustments
-  - 🕒 Implement cart persistence
+- ✅ **Shopping Cart**:
+  - ✅ Complete cart functionality
+  - ✅ Add quantity adjustments
+  - ✅ Implement cart persistence
 
-- 🕒 **Checkout Process**:
-  - 🕒 Create multi-step checkout flow
-  - 🕒 Add address management
-  - 🕒 Implement order summary
+- ✅ **Checkout Process**:
+  - ✅ Create multi-step checkout flow
+  - ✅ Add address management
+  - ✅ Implement order summary
 
-- 🕒 **User Dashboard**:
-  - 🕒 Build profile management
-  - 🕒 Add order history view
+- ✅ **User Dashboard**:
+  - ✅ Build profile management
+  - ✅ Add order history view
   - 🕒 Implement wishlist functionality
 
-- 🕒 **Search and Filtering**:
-  - 🕒 Enhance product search with autocomplete
-  - 🕒 Add advanced filtering options
-  - 🕒 Implement sorting functionality
+- ✅ **Search and Filtering**:
+  - ✅ Enhance product search with autocomplete
+  - ✅ Add advanced filtering options
+  - ✅ Implement sorting functionality
 
 ### 2. Performance Optimization
 

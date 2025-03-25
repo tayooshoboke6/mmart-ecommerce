@@ -18,6 +18,9 @@ export const Header = () => {
     ? cartItems.reduce((total, item) => total + item.quantity, 0) 
     : 0;
 
+  // Check if user has admin role
+  const isAdmin = user && user.role === 'admin';
+
   const toggleMobileMenu = () => {
     setIsMobileMenuOpen(!isMobileMenuOpen);
     // Close search when opening mobile menu
@@ -143,6 +146,9 @@ export const Header = () => {
                   <Link to="/account" className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">My Profile</Link>
                   <Link to="/orders" className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">My Orders</Link>
                   <Link to="/account/wishlist" className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Wishlist</Link>
+                  {isAdmin && (
+                    <Link to="/admin" className="block px-4 py-2 text-sm text-blue-600 font-medium hover:bg-gray-100">Admin Dashboard</Link>
+                  )}
                   <button onClick={handleLogout} className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Logout</button>
                 </div>
               </div>
@@ -185,6 +191,9 @@ export const Header = () => {
             {user ? (
               <>
                 <Link to="/account" className="py-2 text-[#2E2E2E] hover:text-[#0071ce] font-medium">Hello {user.name || user.email?.split('@')[0]}</Link>
+                {isAdmin && (
+                  <Link to="/admin" className="py-2 text-blue-600 font-medium">Admin Dashboard</Link>
+                )}
                 <button onClick={handleLogout} className="py-2 text-left text-[#2E2E2E] hover:text-[#0071ce] font-medium">Logout</button>
               </>
             ) : (
