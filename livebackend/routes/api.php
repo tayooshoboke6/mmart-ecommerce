@@ -263,6 +263,10 @@ Route::middleware(['auth:sanctum'])->prefix('admin')->group(function () {
     Route::post('/products/bulk-feature', [ProductController::class, 'bulkFeature']);
     Route::post('/products/bulk-status', [ProductController::class, 'bulkStatus']);
     
+    // Product Import Routes
+    Route::post('/products/import', [ProductController::class, 'importProducts']);
+    Route::get('/products/import/template', [ProductController::class, 'downloadImportTemplate']);
+    
     // Category Management
     Route::get('/categories/stock-data', [\App\Http\Controllers\Admin\CategoryAdminController::class, 'getCategoryStockData']);
     Route::apiResource('/categories', \App\Http\Controllers\Admin\CategoryAdminController::class);

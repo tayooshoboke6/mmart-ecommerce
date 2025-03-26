@@ -153,6 +153,10 @@ const Products = () => {
   const [selectedCategory, setSelectedCategory] = useState('');
   const [stockStatusFilter, setStockStatusFilter] = useState('');
   const [expiryStatusFilter, setExpiryStatusFilter] = useState('');
+  const [importFile, setImportFile] = useState(null);
+  const [isImporting, setIsImporting] = useState(false);
+  const [importResults, setImportResults] = useState(null);
+  const [showImportModal, setShowImportModal] = useState(false);
 
   useEffect(() => {
     fetchProducts();
@@ -598,13 +602,14 @@ const Products = () => {
           is_featured: dataToSend.is_featured || false,
           is_new_arrival: dataToSend.is_new_arrival || false,
           is_hot_deal: dataToSend.is_hot_deal || false,
+          image_url: dataToSend.image_url || null,
+          brand: dataToSend.brand || null,
+          barcode: dataToSend.barcode || null,
+          short_description: dataToSend.short_description || '',
           is_best_seller: dataToSend.is_best_seller || false,
           is_expiring_soon: dataToSend.is_expiring_soon || false,
           is_clearance: dataToSend.is_clearance || false,
           is_recommended: dataToSend.is_recommended || false,
-          image_url: dataToSend.image_url || null,
-          brand: dataToSend.brand || null,
-          barcode: dataToSend.barcode || null,
           expiry_date: dataToSend.expiry_date || null,
           meta_data: dataToSend.meta_data || null,
           weight: dataToSend.weight || null,
@@ -775,6 +780,63 @@ const Products = () => {
     }
   };
 
+  const handleImportProducts = async () => {
+    if (!importFile) {
+      alert('Please select a file to import');
+      return;
+    }
+
+    setIsImporting(true);
+    setImportResults(null);
+
+    try {
+      const formData = new FormData();
+      formData.append('file', importFile);
+
+      const response = await api.post('/admin/products/import', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data'
+        }
+      });
+
+      if (response.data.status === 'success') {
+        setImportResults(response.data.data);
+        // Refresh the product list after successful import
+        fetchProducts();
+      } else {
+        throw new Error(response.data.message || 'Failed to import products');
+      }
+    } catch (err) {
+      console.error('Error importing products:', err);
+      
+      setImportResults({
+        error: err.message || 'Failed to import products'
+      });
+    } finally {
+      setIsImporting(false);
+    }
+  };
+
+  const handleDownloadTemplate = async () => {
+    try {
+      const response = await api.get('/admin/products/import/template', {
+        responseType: 'blob'
+      });
+      
+      // Create a download link and trigger the download
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', 'products_import_template.csv');
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+    } catch (err) {
+      console.error('Error downloading template:', err);
+      alert('Failed to download template: ' + (err.message || 'Unknown error'));
+    }
+  };
+
   // Render loading state
   if (loading && products.length === 0) {
     return (
@@ -800,7 +862,10 @@ const Products = () => {
             Add New Product
           </button>
 
-          <button className="px-4 py-2 bg-white border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50">
+          <button 
+            onClick={() => setShowImportModal(true)}
+            className="px-4 py-2 bg-white border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50"
+          >
             Import Products
           </button>
         </div>
@@ -1152,6 +1217,179 @@ const Products = () => {
               onSave={handleSaveProduct}
               onCancel={handleCloseModal}
             />
+          </div>
+        </div>
+      )}
+      {showImportModal && (
+        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+          <div className="relative top-20 mx-auto p-5 border w-full max-w-3xl shadow-lg rounded-md bg-white">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-medium text-gray-900">Import Products</h3>
+              <button 
+                onClick={() => {
+                  setShowImportModal(false);
+                  setImportResults(null);
+                  setImportFile(null);
+                }}
+                className="text-gray-400 hover:text-gray-500"
+              >
+                <span className="sr-only">Close</span>
+                <svg className="h-6 w-6" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            
+            {!importResults ? (
+              <>
+                <div className="mb-4">
+                  <p className="text-sm text-gray-500 mb-4">
+                    Upload a CSV file with product data. You can download a template to see the required format.
+                  </p>
+                  <label htmlFor="importFile" className="block text-sm font-medium text-gray-700">Select a CSV file to import</label>
+                  <input
+                    type="file"
+                    name="importFile"
+                    id="importFile"
+                    accept=".csv,.txt"
+                    onChange={(e) => setImportFile(e.target.files[0])}
+                    className="block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-primary focus:border-primary sm:text-sm"
+                  />
+                </div>
+                
+                <div className="flex justify-between space-x-3">
+                  <button
+                    type="button"
+                    onClick={handleDownloadTemplate}
+                    className="bg-white py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary"
+                  >
+                    Download Template
+                  </button>
+                  
+                  <div className="flex space-x-3">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowImportModal(false);
+                        setImportFile(null);
+                      }}
+                      className="bg-white py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleImportProducts}
+                      disabled={isImporting || !importFile}
+                      className={`py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary ${
+                        isImporting || !importFile 
+                          ? 'bg-gray-400 cursor-not-allowed' 
+                          : 'bg-primary hover:bg-primary-dark'
+                      }`}
+                    >
+                      {isImporting ? 'Importing...' : 'Import'}
+                    </button>
+                  </div>
+                </div>
+              </>
+            ) : (
+              <>
+                {importResults.error ? (
+                  <div className="mb-4 p-4 bg-red-50 rounded-md">
+                    <div className="flex">
+                      <div className="flex-shrink-0">
+                        <svg className="h-5 w-5 text-red-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                          <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                        </svg>
+                      </div>
+                      <div className="ml-3">
+                        <h3 className="text-sm font-medium text-red-800">Import failed</h3>
+                        <div className="mt-2 text-sm text-red-700">
+                          <p>{importResults.error}</p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="mb-4">
+                    <div className="p-4 bg-green-50 rounded-md mb-4">
+                      <div className="flex">
+                        <div className="flex-shrink-0">
+                          <svg className="h-5 w-5 text-green-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                          </svg>
+                        </div>
+                        <div className="ml-3">
+                          <h3 className="text-sm font-medium text-green-800">Import successful</h3>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <div className="mb-4">
+                      <h4 className="text-sm font-medium text-gray-700 mb-2">Import Summary:</h4>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="p-3 bg-gray-50 rounded-md">
+                          <span className="text-xs text-gray-500">New Products</span>
+                          <p className="text-lg font-semibold">{importResults.stats?.imported || 0}</p>
+                        </div>
+                        <div className="p-3 bg-gray-50 rounded-md">
+                          <span className="text-xs text-gray-500">Updated Products</span>
+                          <p className="text-lg font-semibold">{importResults.stats?.updated || 0}</p>
+                        </div>
+                        <div className="p-3 bg-gray-50 rounded-md">
+                          <span className="text-xs text-gray-500">Skipped Rows</span>
+                          <p className="text-lg font-semibold">{importResults.stats?.skipped || 0}</p>
+                        </div>
+                        <div className="p-3 bg-gray-50 rounded-md">
+                          <span className="text-xs text-gray-500">Errors</span>
+                          <p className="text-lg font-semibold">{importResults.stats?.failures || 0}</p>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    {importResults.failures && importResults.failures.length > 0 && (
+                      <div className="mb-4">
+                        <h4 className="text-sm font-medium text-gray-700 mb-2">Errors:</h4>
+                        <div className="max-h-60 overflow-y-auto">
+                          <table className="min-w-full divide-y divide-gray-200">
+                            <thead className="bg-gray-50">
+                              <tr>
+                                <th scope="col" className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Row</th>
+                                <th scope="col" className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Field</th>
+                                <th scope="col" className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Error</th>
+                              </tr>
+                            </thead>
+                            <tbody className="bg-white divide-y divide-gray-200">
+                              {importResults.failures.map((failure, index) => (
+                                <tr key={index}>
+                                  <td className="px-3 py-2 whitespace-nowrap text-xs text-gray-500">{failure.row}</td>
+                                  <td className="px-3 py-2 whitespace-nowrap text-xs text-gray-500">{failure.attribute}</td>
+                                  <td className="px-3 py-2 text-xs text-gray-500">{failure.errors.join(', ')}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+                
+                <div className="flex justify-end">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowImportModal(false);
+                      setImportResults(null);
+                      setImportFile(null);
+                    }}
+                    className="bg-primary py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white hover:bg-primary-dark focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary"
+                  >
+                    Close
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}

@@ -924,7 +924,7 @@ class ProductController extends Controller
                 $daysData = $query
                     ->select(
                         DB::raw('HOUR(created_at) as hour'),
-                        DB::raw('DATE_FORMAT(created_at, "%H:00") as day'),
+                        DB::raw('DATE_FORMAT(created_at, "%Y-%m-%d %H:00:00") as day'),
                         DB::raw('COUNT(*) as order_count'),
                         DB::raw('SUM(grand_total) as revenue'),
                         DB::raw('AVG(grand_total) as avg_order_value')
@@ -1264,6 +1264,140 @@ class ProductController extends Controller
             return response()->json([
                 'status' => 'error',
                 'message' => 'Failed to fetch dashboard stats: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Import products from CSV/Excel file.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @return \Illuminate\Http\Response
+     */
+    public function importProducts(Request $request)
+    {
+        try {
+            // Validate the uploaded file
+            $validator = Validator::make($request->all(), [
+                'file' => 'required|file|mimes:csv,txt|max:10240', // Max 10MB
+            ]);
+
+            if ($validator->fails()) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'Invalid file',
+                    'errors' => $validator->errors()
+                ], 422);
+            }
+
+            // Import the products
+            $import = new \App\Imports\ProductsImport();
+            $import->import($request->file('file'));
+
+            // Get import statistics
+            $stats = $import->getStats();
+
+            // Get failures
+            $failures = $import->failures();
+            $failureMessages = [];
+
+            foreach ($failures as $failure) {
+                $failureMessages[] = [
+                    'row' => $failure['row'],
+                    'attribute' => $failure['attribute'],
+                    'errors' => $failure['errors'],
+                    'values' => $failure['values'] ?? [],
+                ];
+            }
+
+            // Clear product cache
+            $this->clearProductCache();
+
+            return response()->json([
+                'status' => 'success',
+                'message' => 'Products imported successfully',
+                'data' => [
+                    'stats' => $stats,
+                    'failures' => $failureMessages
+                ]
+            ]);
+        } catch (\Exception $e) {
+            \Log::error('Error importing products: ' . $e->getMessage());
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Failed to import products: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Download product import template.
+     *
+     * @return \Illuminate\Http\Response
+     */
+    public function downloadImportTemplate()
+    {
+        try {
+            // Create a template file if it doesn't exist
+            $templatePath = storage_path('app/templates');
+            if (!file_exists($templatePath)) {
+                mkdir($templatePath, 0755, true);
+            }
+            
+            $templateFile = $templatePath . '/products_import_template.csv';
+            
+            // Create the template file with headers
+            $headers = [
+                'name', 'sku', 'base_price', 'sale_price', 'stock_quantity', 
+                'category', 'description', 'short_description', 'is_active', 
+                'is_featured', 'is_new_arrival', 'is_hot_deal', 'is_best_seller', 
+                'is_expiring_soon', 'is_clearance', 'is_recommended', 'expiry_date', 
+                'weight', 'dimensions', 'meta_title', 'meta_description', 'meta_keywords',
+                'image_url', 'brand', 'barcode'
+            ];
+            
+            $handle = fopen($templateFile, 'w');
+            fputcsv($handle, $headers);
+            
+            // Add sample products
+            $sampleProducts = [
+                [
+                    'Organic Banana Bunch', 'FRUIT001', '2.99', '2.49', '50',
+                    'Fresh Foods', 'Fresh organic banana bunch from local farms', 'Organic bananas',
+                    '1', '1', '1', '0', '0', '0', '0', '1', '2023-12-31',
+                    '0.5', '20x10x5', 'Organic Bananas', 'Fresh organic bananas from local farms', 'banana,organic,fruit',
+                    'https://placehold.co/600x400?font=roboto&text=Banana', 'Organic Farms', 'BANA123456'
+                ],
+                [
+                    'Premium Coffee Beans', 'COFFEE001', '14.99', '12.99', '30',
+                    'Updated Beverages Name', 'Premium Arabica coffee beans, dark roast', 'Premium coffee',
+                    '1', '1', '0', '1', '1', '0', '0', '1', '2024-06-30',
+                    '0.35', '15x8x22', 'Premium Coffee Beans', 'Arabica coffee beans, dark roast', 'coffee,beans,arabica,dark roast',
+                    'https://placehold.co/600x400?font=roboto&text=Coffee', 'Coffee Delight', 'COFF789012'
+                ],
+                [
+                    'Smart LED TV 55"', 'ELEC001', '499.99', '449.99', '15',
+                    'Electronics', '55-inch Smart LED TV with 4K resolution', 'Smart LED TV',
+                    '1', '0', '1', '0', '0', '0', '0', '1', '2024-12-31',
+                    '15.2', '123x71x8', 'Smart LED TV 55"', '55-inch Smart LED TV with 4K resolution', 'tv,smart,led,4k,electronics',
+                    'https://placehold.co/600x400?font=roboto&text=TV', 'TechVision', 'ELTV567890'
+                ]
+            ];
+            
+            foreach ($sampleProducts as $product) {
+                fputcsv($handle, $product);
+            }
+            
+            fclose($handle);
+            
+            return response()->download($templateFile, 'products_import_template.csv', [
+                'Content-Type' => 'text/csv',
+            ]);
+        } catch (\Exception $e) {
+            \Log::error('Error creating template: ' . $e->getMessage());
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Failed to generate template: ' . $e->getMessage()
             ], 500);
         }
     }
