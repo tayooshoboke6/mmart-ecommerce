@@ -353,23 +353,20 @@ class CategoryAdminController extends Controller
     }
 
     /**
-     * Clear all category-related cache.
+     * Clear the category cache.
+     *
+     * @return void
      */
-    private function clearCategoryCache()
+    public function clearCategoryCache()
     {
-        // Clear all category tree cache variations
-        Cache::forget('categories.tree.with_inactive');
-        Cache::forget('categories.tree.active_only');
-        
-        // Clear any cache keys that start with categories.tree
-        $keys = Cache::get('cache_keys.categories', []);
+        // Clear cache for all keys with the categories_ prefix
+        $keys = Cache::get('category_cache_keys', []);
         foreach ($keys as $key) {
-            if (strpos($key, 'categories.tree') === 0) {
-                Cache::forget($key);
-            }
+            Cache::forget($key);
         }
+        Cache::forget('category_cache_keys');
         
-        // Log cache clearing for debugging
-        \Log::info('Category cache cleared');
+        // Log cache clearing
+        \Illuminate\Support\Facades\Log::info('Category cache cleared');
     }
 }

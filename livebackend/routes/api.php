@@ -253,6 +253,11 @@ Route::middleware(['auth:sanctum'])->prefix('admin')->group(function () {
     Route::post('/products', [ProductController::class, 'store']);
     Route::put('/products/{product}', [ProductController::class, 'update']);
     Route::delete('/products/{product}', [ProductController::class, 'destroy']);
+    Route::put('/products/{product}/featured', [ProductController::class, 'toggleFeatured']);
+    Route::put('/products/{product}/status', [ProductController::class, 'toggleStatus']);
+    Route::post('/products/bulk-delete', [ProductController::class, 'bulkDelete']);
+    Route::post('/products/bulk-feature', [ProductController::class, 'bulkFeature']);
+    Route::post('/products/bulk-status', [ProductController::class, 'bulkStatus']);
     
     // Category Management
     Route::get('/categories/stock-data', [\App\Http\Controllers\Admin\CategoryAdminController::class, 'getCategoryStockData']);

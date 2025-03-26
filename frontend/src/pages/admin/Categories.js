@@ -38,11 +38,29 @@ const Categories = () => {
 
   const fetchCategories = async () => {
     setLoading(true);
+    setError(null);
+
     try {
       const response = await api.get('/admin/categories');
 
       if (response.data && response.data.categories) {
-        setCategories(response.data.categories.data || []);
+        // Make sure each category has parent information
+        const categoriesData = response.data.categories.data || [];
+        
+        // Process categories to ensure parent information is properly loaded
+        const processedCategories = categoriesData.map(category => {
+          // If the category has parent_id and parent object, use it
+          if (category.parent_id && category.parent) {
+            return {
+              ...category,
+              parent_name: category.parent.name
+            };
+          }
+          return category;
+        });
+        
+        console.log('Processed categories:', processedCategories);
+        setCategories(processedCategories);
         setUsingMockData(false);
       } else {
         throw new Error('Failed to fetch categories');
@@ -73,12 +91,24 @@ const Categories = () => {
 
       // Check if the response contains a success message
       if (response.data.status === 'success' || (response.data.message && response.data.message.includes('success'))) {
-        console.log('Category created successfully:', response.data.category);
+        console.log('Category added successfully:', response.data.category);
+        
+        // Add parent_name if parent_id exists and we can find the parent
+        let newCategoryWithParent = response.data.category;
+        if (newCategoryWithParent.parent_id) {
+          const parentCategory = categories.find(c => c.id === newCategoryWithParent.parent_id);
+          if (parentCategory) {
+            newCategoryWithParent.parent_name = parentCategory.name;
+          }
+        }
+        
         // Add the new category to the local state
-        setCategories([...categories, response.data.category]);
-        setNewCategory({ 
-          name: '', 
-          description: '', 
+        setCategories([...categories, newCategoryWithParent]);
+        
+        // Reset the form
+        setNewCategory({
+          name: '',
+          description: '',
           parent_id: '', 
           is_active: true, 
           is_featured: false,
@@ -87,8 +117,7 @@ const Categories = () => {
         });
         setShowAddForm(false);
       } else {
-        console.error('API returned non-success status:', response.data);
-        throw new Error(response.data.message || 'Failed to add category');
+        alert('Failed to add category: Unknown error');
       }
     } catch (err) {
       console.error('Error adding category:', err);
@@ -108,9 +137,9 @@ const Categories = () => {
         try {
           // Refresh the categories list
           fetchCategories();
-          setNewCategory({ 
-            name: '', 
-            description: '', 
+          setNewCategory({
+            name: '',
+            description: '',
             parent_id: '', 
             is_active: true, 
             is_featured: false,
@@ -140,9 +169,9 @@ const Categories = () => {
         };
 
         setCategories([...categories, createdCategory]);
-        setNewCategory({ 
-          name: '', 
-          description: '', 
+        setNewCategory({
+          name: '',
+          description: '',
           parent_id: '', 
           is_active: true, 
           is_featured: false,
@@ -151,7 +180,7 @@ const Categories = () => {
         });
         setShowAddForm(false);
       } else {
-        alert('Failed to add category: ' + (err.message || 'Unknown error'));
+        alert('Failed to add category: Unknown error');
       }
     }
   };
@@ -212,7 +241,7 @@ const Categories = () => {
         ));
         setEditingCategory(null);
       } else {
-        alert('Failed to update category: ' + (err.message || 'Unknown error'));
+        alert('Failed to update category: Unknown error');
       }
     }
   };
@@ -267,7 +296,7 @@ const Categories = () => {
         // Simulate deleting a category with mock data
         setCategories(categories.filter(category => category.id !== categoryId));
       } else {
-        alert('Failed to delete category: ' + (err.message || 'Unknown error'));
+        alert('Failed to delete category: Unknown error');
       }
     }
   };
@@ -631,7 +660,7 @@ const Categories = () => {
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="text-sm text-gray-500">
                         {category.parent_id ? (
-                          categories.find(c => c.id === category.parent_id)?.name || 'Unknown'
+                          category.parent_name || categories.find(c => c.id === category.parent_id)?.name || 'Unknown'
                         ) : (
                           'None'
                         )}

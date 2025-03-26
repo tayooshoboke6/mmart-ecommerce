@@ -40,6 +40,7 @@ class Product extends Model
         'is_clearance',
         'is_recommended',
         'image_url',
+        'weight',
     ];
 
     /**
