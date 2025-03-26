@@ -1,5 +1,7 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { ToastContainer } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
 import { AuthProvider } from './context/AuthContext';
 import { CartProvider } from './context/CartContext';
 import { NotificationProvider } from './context/NotificationContext';
@@ -26,6 +28,7 @@ import Products from './pages/admin/Products';
 import Categories from './pages/admin/Categories';
 import Orders from './pages/admin/Orders';
 import Users from './pages/admin/Users';
+import StoreAddresses from './pages/admin/StoreAddresses';
 
 // Import pages (to be created)
 const NotFound = () => <div className="container mx-auto px-4 py-8">Page Not Found</div>;
@@ -61,6 +64,11 @@ function App() {
               <Route path="/admin/users" element={
                 <AdminLayout>
                   <Users />
+                </AdminLayout>
+              } />
+              <Route path="/admin/store-addresses" element={
+                <AdminLayout>
+                  <StoreAddresses />
                 </AdminLayout>
               } />
               
@@ -148,6 +156,7 @@ function App() {
             </Routes>
           </CartProvider>
         </NotificationProvider>
+        <ToastContainer position="top-right" autoClose={3000} />
       </AuthProvider>
     </Router>
   );
