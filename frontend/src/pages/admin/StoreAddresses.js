@@ -1,13 +1,17 @@
 import React, { useState, useEffect } from 'react';
-import { toast } from 'react-toastify';
+import axios from 'axios';
+import { toast, ToastContainer } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
+import { FaMapMarkerAlt, FaPlus, FaEdit, FaTrash, FaCheck, FaTimes } from 'react-icons/fa';
+import GooglePlacesAutocomplete from '../../components/GooglePlacesAutocomplete';
 import api from '../../services/api';
-import { FaPlus, FaEdit, FaTrash, FaMapMarkerAlt } from 'react-icons/fa';
 
 const StoreAddresses = () => {
   const [storeAddresses, setStoreAddresses] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [currentAddress, setCurrentAddress] = useState(null);
+  const [activeTab, setActiveTab] = useState('address');
   const [formData, setFormData] = useState({
     name: '',
     address_line1: '',
@@ -21,6 +25,7 @@ const StoreAddresses = () => {
     latitude: '',
     longitude: '',
     is_pickup_location: false,
+    is_delivery_location: false,
     is_active: true,
     opening_hours: '',
     notes: '',
@@ -80,6 +85,7 @@ const StoreAddresses = () => {
   // Open modal for creating a new address
   const handleAddNew = () => {
     setCurrentAddress(null);
+    setActiveTab('address');
     setFormData({
       name: '',
       address_line1: '',
@@ -93,6 +99,7 @@ const StoreAddresses = () => {
       latitude: '',
       longitude: '',
       is_pickup_location: false,
+      is_delivery_location: false,
       is_active: true,
       opening_hours: '',
       notes: '',
@@ -108,6 +115,7 @@ const StoreAddresses = () => {
   // Open modal for editing an existing address
   const handleEdit = (address) => {
     setCurrentAddress(address);
+    setActiveTab('address');
     setFormData({
       name: address.name,
       address_line1: address.address_line1,
@@ -121,6 +129,7 @@ const StoreAddresses = () => {
       latitude: address.latitude || '',
       longitude: address.longitude || '',
       is_pickup_location: address.is_pickup_location,
+      is_delivery_location: address.is_delivery_location,
       is_active: address.is_active,
       opening_hours: address.opening_hours || '',
       notes: address.notes || '',
@@ -294,306 +303,369 @@ const StoreAddresses = () => {
               </button>
             </div>
             <form onSubmit={handleSubmit}>
-              <div className="px-6 py-4 max-h-[70vh] overflow-y-auto">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {/* Name */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Location Name*
-                    </label>
-                    <input
-                      type="text"
-                      name="name"
-                      value={formData.name}
-                      onChange={handleChange}
-                      required
-                      className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-primary focus:border-primary"
-                    />
-                  </div>
-                  
-                  {/* Address Line 1 */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Address Line 1*
-                    </label>
-                    <input
-                      type="text"
-                      name="address_line1"
-                      value={formData.address_line1}
-                      onChange={handleChange}
-                      required
-                      className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-primary focus:border-primary"
-                    />
-                  </div>
-                  
-                  {/* Address Line 2 */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Address Line 2
-                    </label>
-                    <input
-                      type="text"
-                      name="address_line2"
-                      value={formData.address_line2}
-                      onChange={handleChange}
-                      className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-primary focus:border-primary"
-                    />
-                  </div>
-                  
-                  {/* City */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      City*
-                    </label>
-                    <input
-                      type="text"
-                      name="city"
-                      value={formData.city}
-                      onChange={handleChange}
-                      required
-                      className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-primary focus:border-primary"
-                    />
-                  </div>
-                  
-                  {/* State */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      State*
-                    </label>
-                    <input
-                      type="text"
-                      name="state"
-                      value={formData.state}
-                      onChange={handleChange}
-                      required
-                      className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-primary focus:border-primary"
-                    />
-                  </div>
-                  
-                  {/* Postal Code */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Postal Code
-                    </label>
-                    <input
-                      type="text"
-                      name="postal_code"
-                      value={formData.postal_code}
-                      onChange={handleChange}
-                      className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-primary focus:border-primary"
-                    />
-                  </div>
-                  
-                  {/* Country */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Country
-                    </label>
-                    <input
-                      type="text"
-                      name="country"
-                      value={formData.country}
-                      onChange={handleChange}
-                      className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-primary focus:border-primary"
-                    />
-                  </div>
-                  
-                  {/* Phone */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Phone
-                    </label>
-                    <input
-                      type="text"
-                      name="phone"
-                      value={formData.phone}
-                      onChange={handleChange}
-                      className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-primary focus:border-primary"
-                    />
-                  </div>
-                  
-                  {/* Email */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Email
-                    </label>
-                    <input
-                      type="email"
-                      name="email"
-                      value={formData.email}
-                      onChange={handleChange}
-                      className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-primary focus:border-primary"
-                    />
-                  </div>
-                  
-                  {/* Latitude */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Latitude
-                    </label>
-                    <input
-                      type="number"
-                      step="0.0000001"
-                      name="latitude"
-                      value={formData.latitude}
-                      onChange={handleChange}
-                      className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-primary focus:border-primary"
-                    />
-                  </div>
-                  
-                  {/* Longitude */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Longitude
-                    </label>
-                    <input
-                      type="number"
-                      step="0.0000001"
-                      name="longitude"
-                      value={formData.longitude}
-                      onChange={handleChange}
-                      className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-primary focus:border-primary"
-                    />
-                  </div>
-                  
-                  {/* Opening Hours */}
-                  <div className="md:col-span-2">
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Opening Hours
-                    </label>
-                    <textarea
-                      name="opening_hours"
-                      value={formData.opening_hours}
-                      onChange={handleChange}
-                      rows="2"
-                      className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-primary focus:border-primary"
-                      placeholder="e.g. Mon-Fri: 9am-5pm, Sat: 10am-2pm, Sun: Closed"
-                    ></textarea>
-                  </div>
-                  
-                  {/* Notes */}
-                  <div className="md:col-span-2">
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Notes
-                    </label>
-                    <textarea
-                      name="notes"
-                      value={formData.notes}
-                      onChange={handleChange}
-                      rows="2"
-                      className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-primary focus:border-primary"
-                    ></textarea>
-                  </div>
-                  
-                  {/* Delivery Base Fee */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Delivery Base Fee
-                    </label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      name="delivery_base_fee"
-                      value={formData.delivery_base_fee}
-                      onChange={handleChange}
-                      className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-primary focus:border-primary"
-                    />
-                  </div>
-                  
-                  {/* Delivery Price Per KM */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Delivery Price Per KM
-                    </label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      name="delivery_price_per_km"
-                      value={formData.delivery_price_per_km}
-                      onChange={handleChange}
-                      className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-primary focus:border-primary"
-                    />
-                  </div>
-                  
-                  {/* Delivery Radius KM */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Delivery Radius (KM)
-                    </label>
-                    <input
-                      type="number"
-                      step="1"
-                      name="delivery_radius_km"
-                      value={formData.delivery_radius_km}
-                      onChange={handleChange}
-                      className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-primary focus:border-primary"
-                    />
-                  </div>
-                  
-                  {/* Free Delivery Threshold */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Free Delivery Threshold
-                    </label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      name="free_delivery_threshold"
-                      value={formData.free_delivery_threshold}
-                      onChange={handleChange}
-                      className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-primary focus:border-primary"
-                    />
-                  </div>
-                  
-                  {/* Offers Free Delivery */}
-                  <div>
-                    <div className="flex items-center">
-                      <input
-                        type="checkbox"
-                        id="offers_free_delivery"
-                        name="offers_free_delivery"
-                        checked={formData.offers_free_delivery}
-                        onChange={handleChange}
-                        className="h-4 w-4 text-primary focus:ring-primary border-gray-300 rounded"
-                      />
-                      <label htmlFor="offers_free_delivery" className="ml-2 block text-sm text-gray-900">
-                        Offers Free Delivery
-                      </label>
+              <div className="px-6 py-4">
+                {/* Tabs */}
+                <div className="flex border-b mb-4">
+                  <button
+                    type="button"
+                    className={`py-2 px-4 font-medium ${activeTab === 'address' ? 'text-primary border-b-2 border-primary' : 'text-gray-500'}`}
+                    onClick={() => setActiveTab('address')}
+                  >
+                    Address Information
+                  </button>
+                  <button
+                    type="button"
+                    className={`py-2 px-4 font-medium ${activeTab === 'delivery' ? 'text-primary border-b-2 border-primary' : 'text-gray-500'}`}
+                    onClick={() => setActiveTab('delivery')}
+                  >
+                    Delivery Settings
+                  </button>
+                </div>
+                
+                <div className="max-h-[60vh] overflow-y-auto">
+                  {activeTab === 'address' && (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {/* Name */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Location Name*
+                        </label>
+                        <input
+                          type="text"
+                          name="name"
+                          value={formData.name}
+                          onChange={handleChange}
+                          required
+                          className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-primary focus:border-primary"
+                        />
+                      </div>
+                      
+                      {/* Address Line 1 */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Address Line 1*
+                        </label>
+                        <GooglePlacesAutocomplete
+                          placeholder="Enter address"
+                          className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-primary focus:border-primary"
+                          required={true}
+                          value={formData.address_line1}
+                          onChange={(e) => handleChange({ target: { name: 'address_line1', value: e.target.value } })}
+                          onPlaceSelected={(place) => {
+                            // Update form with selected place data
+                            setFormData({
+                              ...formData,
+                              address_line1: place.formattedAddress,
+                              city: place.city || formData.city,
+                              state: place.state || formData.state,
+                              postal_code: place.postalCode || formData.postal_code,
+                              country: place.country || formData.country,
+                              latitude: place.latitude || formData.latitude,
+                              longitude: place.longitude || formData.longitude
+                            });
+                          }}
+                        />
+                      </div>
+                      
+                      {/* Address Line 2 */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Address Line 2
+                        </label>
+                        <input
+                          type="text"
+                          name="address_line2"
+                          value={formData.address_line2}
+                          onChange={handleChange}
+                          className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-primary focus:border-primary"
+                        />
+                      </div>
+                      
+                      {/* City */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          City*
+                        </label>
+                        <input
+                          type="text"
+                          name="city"
+                          value={formData.city}
+                          onChange={handleChange}
+                          required
+                          className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-primary focus:border-primary"
+                        />
+                      </div>
+                      
+                      {/* State */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          State*
+                        </label>
+                        <input
+                          type="text"
+                          name="state"
+                          value={formData.state}
+                          onChange={handleChange}
+                          required
+                          className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-primary focus:border-primary"
+                        />
+                      </div>
+                      
+                      {/* Postal Code */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Postal Code
+                        </label>
+                        <input
+                          type="text"
+                          name="postal_code"
+                          value={formData.postal_code}
+                          onChange={handleChange}
+                          className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-primary focus:border-primary"
+                        />
+                      </div>
+                      
+                      {/* Country */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Country
+                        </label>
+                        <input
+                          type="text"
+                          name="country"
+                          value={formData.country}
+                          onChange={handleChange}
+                          className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-primary focus:border-primary"
+                        />
+                      </div>
+                      
+                      {/* Phone */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Phone
+                        </label>
+                        <input
+                          type="text"
+                          name="phone"
+                          value={formData.phone}
+                          onChange={handleChange}
+                          className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-primary focus:border-primary"
+                        />
+                      </div>
+                      
+                      {/* Email */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Email
+                        </label>
+                        <input
+                          type="email"
+                          name="email"
+                          value={formData.email}
+                          onChange={handleChange}
+                          className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-primary focus:border-primary"
+                        />
+                      </div>
+                      
+                      {/* Latitude */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Latitude
+                        </label>
+                        <input
+                          type="number"
+                          step="0.0000001"
+                          name="latitude"
+                          value={formData.latitude}
+                          onChange={handleChange}
+                          className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-primary focus:border-primary"
+                        />
+                      </div>
+                      
+                      {/* Longitude */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Longitude
+                        </label>
+                        <input
+                          type="number"
+                          step="0.0000001"
+                          name="longitude"
+                          value={formData.longitude}
+                          onChange={handleChange}
+                          className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-primary focus:border-primary"
+                        />
+                      </div>
+                      
+                      {/* Opening Hours */}
+                      <div className="md:col-span-2">
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Opening Hours
+                        </label>
+                        <textarea
+                          name="opening_hours"
+                          value={formData.opening_hours}
+                          onChange={handleChange}
+                          rows="2"
+                          className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-primary focus:border-primary"
+                          placeholder="e.g. Mon-Fri: 9am-5pm, Sat: 10am-2pm, Sun: Closed"
+                        ></textarea>
+                      </div>
+                      
+                      {/* Notes */}
+                      <div className="md:col-span-2">
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Notes
+                        </label>
+                        <textarea
+                          name="notes"
+                          value={formData.notes}
+                          onChange={handleChange}
+                          rows="2"
+                          className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-primary focus:border-primary"
+                        ></textarea>
+                      </div>
+                      
+                      {/* Checkboxes */}
+                      <div>
+                        <div className="flex items-center">
+                          <input
+                            type="checkbox"
+                            id="is_pickup_location"
+                            name="is_pickup_location"
+                            checked={formData.is_pickup_location}
+                            onChange={handleChange}
+                            className="h-4 w-4 text-primary focus:ring-primary border-gray-300 rounded"
+                          />
+                          <label htmlFor="is_pickup_location" className="ml-2 block text-sm text-gray-900">
+                            Is Pickup Location
+                          </label>
+                        </div>
+                      </div>
+                      
+                      <div>
+                        <div className="flex items-center">
+                          <input
+                            type="checkbox"
+                            id="is_delivery_location"
+                            name="is_delivery_location"
+                            checked={formData.is_delivery_location}
+                            onChange={handleChange}
+                            className="h-4 w-4 text-primary focus:ring-primary border-gray-300 rounded"
+                          />
+                          <label htmlFor="is_delivery_location" className="ml-2 block text-sm text-gray-900">
+                            Is Delivery Location
+                          </label>
+                        </div>
+                      </div>
+                      
+                      <div>
+                        <div className="flex items-center">
+                          <input
+                            type="checkbox"
+                            id="is_active"
+                            name="is_active"
+                            checked={formData.is_active}
+                            onChange={handleChange}
+                            className="h-4 w-4 text-primary focus:ring-primary border-gray-300 rounded"
+                          />
+                          <label htmlFor="is_active" className="ml-2 block text-sm text-gray-900">
+                            Is Active
+                          </label>
+                        </div>
+                      </div>
                     </div>
-                  </div>
+                  )}
                   
-                  {/* Checkboxes */}
-                  <div>
-                    <div className="flex items-center">
-                      <input
-                        type="checkbox"
-                        id="is_pickup_location"
-                        name="is_pickup_location"
-                        checked={formData.is_pickup_location}
-                        onChange={handleChange}
-                        className="h-4 w-4 text-primary focus:ring-primary border-gray-300 rounded"
-                      />
-                      <label htmlFor="is_pickup_location" className="ml-2 block text-sm text-gray-900">
-                        Is Pickup Location
-                      </label>
+                  {activeTab === 'delivery' && (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="md:col-span-2 mb-2">
+                        <h3 className="text-lg font-medium text-gray-800">Delivery Settings</h3>
+                        <p className="text-sm text-gray-600">Configure delivery options for this store location</p>
+                      </div>
+                      
+                      {/* Delivery Base Fee */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Delivery Base Fee
+                        </label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          name="delivery_base_fee"
+                          value={formData.delivery_base_fee}
+                          onChange={handleChange}
+                          className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-primary focus:border-primary"
+                        />
+                        <p className="text-xs text-gray-500 mt-1">Base fee charged for all deliveries</p>
+                      </div>
+                      
+                      {/* Delivery Price Per KM */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Delivery Price Per KM
+                        </label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          name="delivery_price_per_km"
+                          value={formData.delivery_price_per_km}
+                          onChange={handleChange}
+                          className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-primary focus:border-primary"
+                        />
+                        <p className="text-xs text-gray-500 mt-1">Additional charge per kilometer</p>
+                      </div>
+                      
+                      {/* Delivery Radius KM */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Delivery Radius (KM)
+                        </label>
+                        <input
+                          type="number"
+                          step="1"
+                          name="delivery_radius_km"
+                          value={formData.delivery_radius_km}
+                          onChange={handleChange}
+                          className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-primary focus:border-primary"
+                        />
+                        <p className="text-xs text-gray-500 mt-1">Maximum distance for delivery</p>
+                      </div>
+                      
+                      {/* Free Delivery Threshold */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Free Delivery Threshold
+                        </label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          name="free_delivery_threshold"
+                          value={formData.free_delivery_threshold}
+                          onChange={handleChange}
+                          className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-primary focus:border-primary"
+                        />
+                        <p className="text-xs text-gray-500 mt-1">Order amount above which delivery is free</p>
+                      </div>
+                      
+                      {/* Offers Free Delivery */}
+                      <div className="md:col-span-2">
+                        <div className="flex items-center">
+                          <input
+                            type="checkbox"
+                            id="offers_free_delivery"
+                            name="offers_free_delivery"
+                            checked={formData.offers_free_delivery}
+                            onChange={handleChange}
+                            className="h-4 w-4 text-primary focus:ring-primary border-gray-300 rounded"
+                          />
+                          <label htmlFor="offers_free_delivery" className="ml-2 block text-sm text-gray-900">
+                            Offers Free Delivery (when threshold is met)
+                          </label>
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                  
-                  <div>
-                    <div className="flex items-center">
-                      <input
-                        type="checkbox"
-                        id="is_active"
-                        name="is_active"
-                        checked={formData.is_active}
-                        onChange={handleChange}
-                        className="h-4 w-4 text-primary focus:ring-primary border-gray-300 rounded"
-                      />
-                      <label htmlFor="is_active" className="ml-2 block text-sm text-gray-900">
-                        Is Active
-                      </label>
-                    </div>
-                  </div>
+                  )}
                 </div>
               </div>
               <div className="px-6 py-4 border-t flex justify-end">
