@@ -218,9 +218,13 @@ Route::middleware(['auth:sanctum'])->prefix('admin')->group(function () {
         }
     });
     
-    // Dashboard Statistics
-    Route::get('/dashboard/stats', [DashboardController::class, 'getStats']);
-    Route::get('/dashboard/recent-orders', [DashboardController::class, 'getRecentOrders']);
+    // Dashboard routes
+    Route::prefix('dashboard')->group(function () {
+        Route::get('/stats', [ProductController::class, 'getDashboardStats']);
+        Route::get('/revenue', [ProductController::class, 'getRevenueData']);
+        Route::get('/peak-days', [ProductController::class, 'getPeakDays']);
+        Route::get('/peak-hours', [ProductController::class, 'getPeakHours']);
+    });
     
     // Settings Management
     Route::get('/settings', [\App\Http\Controllers\Admin\SettingsController::class, 'index']);

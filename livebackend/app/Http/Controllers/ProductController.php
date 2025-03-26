@@ -14,6 +14,7 @@ use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Cache;
+use Carbon\Carbon;
 
 class ProductController extends Controller
 {
@@ -825,6 +826,338 @@ class ProductController extends Controller
     }
 
     /**
+     * Get revenue data for dashboard
+     */
+    public function getRevenueData(Request $request)
+    {
+        try {
+            $startDate = $request->query('start_date') ? 
+                Carbon::parse($request->query('start_date')) : 
+                Carbon::now()->subDays(30)->startOfDay();
+
+            $query = DB::table('orders')
+                ->where('status', '!=', 'cancelled')
+                ->where('payment_status', 'paid')
+                ->where('created_at', '>=', $startDate);
+
+            // For 24-hour analysis, group by hour
+            if ($startDate->diffInHours(Carbon::now()) <= 24) {
+                $revenueData = $query
+                    ->select(
+                        DB::raw('DATE_FORMAT(created_at, "%Y-%m-%d %H:00:00") as date'),
+                        DB::raw('SUM(grand_total) as revenue')
+                    )
+                    ->groupBy(DB::raw('HOUR(created_at)'))
+                    ->orderBy('date')
+                    ->get();
+
+                // Fill in missing hours
+                $filledData = [];
+                $currentDate = Carbon::now();
+                
+                for ($i = 23; $i >= 0; $i--) {
+                    $date = $currentDate->copy()->startOfHour()->subHours($i);
+                    $dateKey = $date->format('Y-m-d H:00:00');
+                    
+                    $hourData = $revenueData->firstWhere('date', $dateKey);
+                    $filledData[] = [
+                        'date' => $dateKey,
+                        'revenue' => $hourData ? $hourData->revenue : 0
+                    ];
+                }
+            } else {
+                $revenueData = $query
+                    ->select(
+                        DB::raw('DATE(created_at) as date'),
+                        DB::raw('SUM(grand_total) as revenue')
+                    )
+                    ->groupBy(DB::raw('DATE(created_at)'))
+                    ->orderBy('date')
+                    ->get();
+
+                // Fill in missing dates
+                $filledData = [];
+                $currentDate = Carbon::now()->startOfDay();
+                $days = $startDate->diffInDays($currentDate);
+                
+                for ($i = $days; $i >= 0; $i--) {
+                    $date = $currentDate->copy()->subDays($i)->format('Y-m-d');
+                    $dayData = $revenueData->firstWhere('date', $date);
+                    
+                    $filledData[] = [
+                        'date' => $date,
+                        'revenue' => $dayData ? $dayData->revenue : 0
+                    ];
+                }
+            }
+
+            return response()->json([
+                'status' => 'success',
+                'data' => $filledData
+            ]);
+        } catch (\Exception $e) {
+            \Log::error('Error fetching revenue data: ' . $e->getMessage());
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Failed to fetch revenue data: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Get peak and low days analysis
+     */
+    public function getPeakDays(Request $request)
+    {
+        try {
+            $startDate = $request->query('start_date') ? 
+                Carbon::parse($request->query('start_date')) : 
+                Carbon::now()->subDays(30)->startOfDay();
+
+            $query = DB::table('orders')
+                ->where('status', '!=', 'cancelled')
+                ->where('payment_status', 'paid')
+                ->where('created_at', '>=', $startDate);
+
+            // For 24-hour analysis, group by hour instead of day
+            if ($startDate->diffInHours(Carbon::now()) <= 24) {
+                $daysData = $query
+                    ->select(
+                        DB::raw('HOUR(created_at) as hour'),
+                        DB::raw('DATE_FORMAT(created_at, "%H:00") as day'),
+                        DB::raw('COUNT(*) as order_count'),
+                        DB::raw('SUM(grand_total) as revenue'),
+                        DB::raw('AVG(grand_total) as avg_order_value')
+                    )
+                    ->groupBy(DB::raw('HOUR(created_at)'))
+                    ->orderBy(DB::raw('HOUR(created_at)'))
+                    ->get();
+
+                // Fill in missing hours
+                $filledData = [];
+                for ($i = 0; $i < 24; $i++) {
+                    $hourData = $daysData->firstWhere('hour', $i);
+                    $filledData[] = (object)[
+                        'day' => sprintf('%02d:00', $i),
+                        'order_count' => $hourData ? $hourData->order_count : 0,
+                        'revenue' => $hourData ? $hourData->revenue : 0,
+                        'avg_order_value' => $hourData ? $hourData->avg_order_value : 0
+                    ];
+                }
+                $daysData = collect($filledData);
+            } else {
+                $daysData = $query
+                    ->select(
+                        DB::raw('DAYNAME(created_at) as day'),
+                        DB::raw('COUNT(*) as order_count'),
+                        DB::raw('SUM(grand_total) as revenue'),
+                        DB::raw('AVG(grand_total) as avg_order_value')
+                    )
+                    ->groupBy('day')
+                    ->orderBy(DB::raw('DAYOFWEEK(MIN(created_at))'))
+                    ->get();
+
+                // Fill in missing dates
+                $filledData = [];
+                $currentDate = Carbon::now()->startOfDay();
+                $days = $startDate->diffInDays($currentDate);
+                
+                for ($i = $days; $i >= 0; $i--) {
+                    $date = $currentDate->copy()->subDays($i)->format('l');
+                    $dayData = $daysData->firstWhere('day', $date);
+                    
+                    $filledData[] = (object)[
+                        'day' => $date,
+                        'order_count' => $dayData ? $dayData->order_count : 0,
+                        'revenue' => $dayData ? $dayData->revenue : 0,
+                        'avg_order_value' => $dayData ? $dayData->avg_order_value : 0
+                    ];
+                }
+                $daysData = collect($filledData);
+            }
+
+            // Calculate peak and low metrics
+            $maxOrders = $daysData->max('order_count');
+            $minOrders = $daysData->min('order_count');
+            $maxRevenue = $daysData->max('revenue');
+            $minRevenue = $daysData->min('revenue');
+
+            $enhancedData = $daysData->map(function($day) use ($maxOrders, $minOrders, $maxRevenue, $minRevenue) {
+                return [
+                    'day' => $day->day,
+                    'order_count' => $day->order_count,
+                    'revenue' => $day->revenue,
+                    'avg_order_value' => $day->avg_order_value,
+                    'is_peak_orders' => $day->order_count == $maxOrders && $day->order_count > 0,
+                    'is_low_orders' => $day->order_count == $minOrders,
+                    'is_peak_revenue' => $day->revenue == $maxRevenue && $day->revenue > 0,
+                    'is_low_revenue' => $day->revenue == $minRevenue,
+                    'performance_score' => $maxOrders > 0 ? 
+                        ($day->order_count / $maxOrders + ($maxRevenue > 0 ? $day->revenue / $maxRevenue : 0)) / 2 * 100 : 0
+                ];
+            });
+
+            return response()->json([
+                'status' => 'success',
+                'data' => $enhancedData,
+                'metrics' => [
+                    'peak_orders_day' => $enhancedData->firstWhere('is_peak_orders', true)['day'] ?? null,
+                    'low_orders_day' => $enhancedData->firstWhere('is_low_orders', true)['day'] ?? null,
+                    'peak_revenue_day' => $enhancedData->firstWhere('is_peak_revenue', true)['day'] ?? null,
+                    'low_revenue_day' => $enhancedData->firstWhere('is_low_revenue', true)['day'] ?? null,
+                ]
+            ]);
+        } catch (\Exception $e) {
+            \Log::error('Error fetching peak days data: ' . $e->getMessage());
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Failed to fetch peak days data'
+            ], 500);
+        }
+    }
+
+    /**
+     * Get peak and low hours analysis
+     */
+    public function getPeakHours(Request $request)
+    {
+        try {
+            $startDate = $request->query('start_date') ? 
+                Carbon::parse($request->query('start_date')) : 
+                Carbon::now()->subDays(30)->startOfDay();
+
+            $query = DB::table('orders')
+                ->where('status', '!=', 'cancelled')
+                ->where('payment_status', 'paid')
+                ->where('created_at', '>=', $startDate);
+
+            // For 24-hour analysis, group by hour instead of day
+            if ($startDate->diffInHours(Carbon::now()) <= 24) {
+                $hoursData = $query
+                    ->select(
+                        DB::raw('HOUR(created_at) as hour'),
+                        DB::raw('DATE_FORMAT(created_at, "%H:00") as day'),
+                        DB::raw('COUNT(*) as order_count'),
+                        DB::raw('SUM(grand_total) as revenue'),
+                        DB::raw('AVG(grand_total) as avg_order_value')
+                    )
+                    ->groupBy(DB::raw('HOUR(created_at)'))
+                    ->orderBy(DB::raw('HOUR(created_at)'))
+                    ->get();
+
+                // Fill in missing hours
+                $filledData = [];
+                for ($i = 0; $i < 24; $i++) {
+                    $hourData = $hoursData->firstWhere('hour', $i);
+                    $filledData[] = (object)[
+                        'hour' => $i,
+                        'hour_formatted' => sprintf('%02d:00', $i),
+                        'order_count' => $hourData ? $hourData->order_count : 0,
+                        'revenue' => $hourData ? $hourData->revenue : 0,
+                        'avg_order_value' => $hourData ? $hourData->avg_order_value : 0
+                    ];
+                }
+                $hoursData = collect($filledData);
+            } else {
+                $hoursData = $query
+                    ->select(
+                        DB::raw('HOUR(created_at) as hour'),
+                        DB::raw('COUNT(*) as order_count'),
+                        DB::raw('SUM(grand_total) as revenue'),
+                        DB::raw('AVG(grand_total) as avg_order_value')
+                    )
+                    ->groupBy('hour')
+                    ->orderBy('hour')
+                    ->get();
+
+                // Fill in missing hours
+                $filledData = [];
+                for ($i = 0; $i < 24; $i++) {
+                    $hourData = $hoursData->firstWhere('hour', $i);
+                    $filledData[] = (object)[
+                        'hour' => $i,
+                        'hour_formatted' => sprintf('%02d:00', $i),
+                        'order_count' => $hourData ? $hourData->order_count : 0,
+                        'revenue' => $hourData ? $hourData->revenue : 0,
+                        'avg_order_value' => $hourData ? $hourData->avg_order_value : 0
+                    ];
+                }
+                $hoursData = collect($filledData);
+            }
+
+            // Calculate metrics
+            $maxOrders = $hoursData->max('order_count');
+            $minOrders = $hoursData->min('order_count');
+            $maxRevenue = $hoursData->max('revenue');
+            $minRevenue = $hoursData->min('revenue');
+
+            // Enhance data with peak/low indicators
+            $enhancedData = $hoursData->map(function($item) use ($maxOrders, $minOrders, $maxRevenue, $minRevenue) {
+                return [
+                    'hour' => $item->hour,
+                    'hour_formatted' => $item->hour_formatted,
+                    'order_count' => $item->order_count,
+                    'revenue' => $item->revenue,
+                    'avg_order_value' => $item->avg_order_value,
+                    'is_peak_orders' => $item->order_count == $maxOrders && $item->order_count > 0,
+                    'is_low_orders' => $item->order_count == $minOrders,
+                    'is_peak_revenue' => $item->revenue == $maxRevenue && $item->revenue > 0,
+                    'is_low_revenue' => $item->revenue == $minRevenue,
+                    'performance_score' => $maxOrders > 0 ? 
+                        ($item->order_count / $maxOrders + ($maxRevenue > 0 ? $item->revenue / $maxRevenue : 0)) / 2 * 100 : 0
+                ];
+            });
+
+            // Group into time segments
+            $segments = [
+                'morning' => [6, 11],
+                'afternoon' => [12, 17],
+                'evening' => [18, 23],
+                'night' => [0, 5]
+            ];
+
+            $segmentAnalysis = [];
+            foreach ($segments as $name => $hours) {
+                $segmentData = $enhancedData->filter(function($item) use ($hours) {
+                    return $item['hour'] >= $hours[0] && $item['hour'] <= $hours[1];
+                });
+                
+                if ($segmentData->isNotEmpty()) {
+                    $segmentAnalysis[$name] = [
+                        'total_orders' => $segmentData->sum('order_count'),
+                        'total_revenue' => $segmentData->sum('revenue'),
+                        'avg_performance' => $segmentData->avg('performance_score')
+                    ];
+                } else {
+                    $segmentAnalysis[$name] = [
+                        'total_orders' => 0,
+                        'total_revenue' => 0,
+                        'avg_performance' => 0
+                    ];
+                }
+            }
+
+            return response()->json([
+                'status' => 'success',
+                'data' => $enhancedData,
+                'segments' => $segmentAnalysis,
+                'metrics' => [
+                    'peak_orders_hour' => $enhancedData->firstWhere('is_peak_orders', true)['hour_formatted'] ?? null,
+                    'low_orders_hour' => $enhancedData->firstWhere('is_low_orders', true)['hour_formatted'] ?? null,
+                    'peak_revenue_hour' => $enhancedData->firstWhere('is_peak_revenue', true)['hour_formatted'] ?? null,
+                    'low_revenue_hour' => $enhancedData->firstWhere('is_low_revenue', true)['hour_formatted'] ?? null,
+                ]
+            ]);
+        } catch (\Exception $e) {
+            \Log::error('Error fetching peak hours data: ' . $e->getMessage());
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Failed to fetch peak hours data: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
      * Upload a base64 encoded image to Cloudinary.
      *
      * @param string $base64Image
@@ -849,5 +1182,89 @@ class ProductController extends Controller
         
         // Generate a placeholder image URL with the product name as text
         return $this->cloudinaryService->generatePlaceholderUrl($text);
+    }
+
+    /**
+     * Get dashboard stats
+     */
+    public function getDashboardStats()
+    {
+        try {
+            $now = Carbon::now();
+            $thirtyDaysAgo = $now->copy()->subDays(30);
+
+            // Get product status counts
+            $productCounts = [
+                'low_stock_count' => Product::where('stock_quantity', '>', 0)
+                    ->where('stock_quantity', '<=', 10)
+                    ->count(),
+                    
+                'out_of_stock_count' => Product::where('stock_quantity', 0)
+                    ->count(),
+                    
+                'about_to_expire_count' => Product::where('expiry_date', '>', $now)
+                    ->where('expiry_date', '<=', $now->copy()->addDays(30))
+                    ->count(),
+                    
+                'expired_count' => Product::where('expiry_date', '<=', $now)
+                    ->count()
+            ];
+
+            // Get order stats
+            $orderStats = [
+                'total_sales' => Order::where('status', '!=', 'cancelled')
+                    ->where('payment_status', 'paid')
+                    ->sum('grand_total'),
+                    
+                'total_orders' => Order::count(),
+                
+                'pending_orders' => Order::where('status', 'pending')->count(),
+                
+                'recent_orders' => Order::with('customer')
+                    ->orderBy('created_at', 'desc')
+                    ->take(5)
+                    ->get()
+                    ->map(function($order) {
+                        return [
+                            'id' => $order->id,
+                            'order_number' => $order->order_number,
+                            'customer_name' => $order->customer ? $order->customer->name : 'Guest',
+                            'total' => $order->grand_total,
+                            'status' => $order->status,
+                            'payment_status' => $order->payment_status,
+                            'created_at' => $order->created_at
+                        ];
+                    }),
+                
+                'orders_by_status' => Order::select('status', DB::raw('count(*) as count'))
+                    ->groupBy('status')
+                    ->get()
+            ];
+
+            // Get customer stats
+            $customerStats = [
+                'total_customers' => Customer::count(),
+                'new_customers' => Customer::where('created_at', '>=', $thirtyDaysAgo)->count()
+            ];
+
+            return response()->json([
+                'status' => 'success',
+                'data' => array_merge(
+                    $productCounts,
+                    $orderStats,
+                    $customerStats,
+                    ['date_range' => [
+                        'start_date' => $thirtyDaysAgo->format('Y-m-d'),
+                        'end_date' => $now->format('Y-m-d')
+                    ]]
+                )
+            ]);
+        } catch (\Exception $e) {
+            \Log::error('Error fetching dashboard stats: ' . $e->getMessage());
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Failed to fetch dashboard stats: ' . $e->getMessage()
+            ], 500);
+        }
     }
 }
