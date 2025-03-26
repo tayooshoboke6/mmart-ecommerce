@@ -23,7 +23,12 @@ const StoreAddresses = () => {
     is_pickup_location: false,
     is_active: true,
     opening_hours: '',
-    notes: ''
+    notes: '',
+    delivery_base_fee: '0',
+    delivery_price_per_km: '0',
+    delivery_radius_km: '10',
+    free_delivery_threshold: '0',
+    offers_free_delivery: false
   });
 
   // Fetch store addresses
@@ -90,7 +95,12 @@ const StoreAddresses = () => {
       is_pickup_location: false,
       is_active: true,
       opening_hours: '',
-      notes: ''
+      notes: '',
+      delivery_base_fee: '0',
+      delivery_price_per_km: '0',
+      delivery_radius_km: '10',
+      free_delivery_threshold: '0',
+      offers_free_delivery: false
     });
     setShowModal(true);
   };
@@ -113,7 +123,12 @@ const StoreAddresses = () => {
       is_pickup_location: address.is_pickup_location,
       is_active: address.is_active,
       opening_hours: address.opening_hours || '',
-      notes: address.notes || ''
+      notes: address.notes || '',
+      delivery_base_fee: address.delivery_base_fee || '0',
+      delivery_price_per_km: address.delivery_price_per_km || '0',
+      delivery_radius_km: address.delivery_radius_km || '10',
+      free_delivery_threshold: address.free_delivery_threshold || '0',
+      offers_free_delivery: address.offers_free_delivery || false
     });
     setShowModal(true);
   };
@@ -468,6 +483,83 @@ const StoreAddresses = () => {
                       rows="2"
                       className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-primary focus:border-primary"
                     ></textarea>
+                  </div>
+                  
+                  {/* Delivery Base Fee */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Delivery Base Fee
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      name="delivery_base_fee"
+                      value={formData.delivery_base_fee}
+                      onChange={handleChange}
+                      className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-primary focus:border-primary"
+                    />
+                  </div>
+                  
+                  {/* Delivery Price Per KM */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Delivery Price Per KM
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      name="delivery_price_per_km"
+                      value={formData.delivery_price_per_km}
+                      onChange={handleChange}
+                      className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-primary focus:border-primary"
+                    />
+                  </div>
+                  
+                  {/* Delivery Radius KM */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Delivery Radius (KM)
+                    </label>
+                    <input
+                      type="number"
+                      step="1"
+                      name="delivery_radius_km"
+                      value={formData.delivery_radius_km}
+                      onChange={handleChange}
+                      className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-primary focus:border-primary"
+                    />
+                  </div>
+                  
+                  {/* Free Delivery Threshold */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Free Delivery Threshold
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      name="free_delivery_threshold"
+                      value={formData.free_delivery_threshold}
+                      onChange={handleChange}
+                      className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-primary focus:border-primary"
+                    />
+                  </div>
+                  
+                  {/* Offers Free Delivery */}
+                  <div>
+                    <div className="flex items-center">
+                      <input
+                        type="checkbox"
+                        id="offers_free_delivery"
+                        name="offers_free_delivery"
+                        checked={formData.offers_free_delivery}
+                        onChange={handleChange}
+                        className="h-4 w-4 text-primary focus:ring-primary border-gray-300 rounded"
+                      />
+                      <label htmlFor="offers_free_delivery" className="ml-2 block text-sm text-gray-900">
+                        Offers Free Delivery
+                      </label>
+                    </div>
                   </div>
                   
                   {/* Checkboxes */}
