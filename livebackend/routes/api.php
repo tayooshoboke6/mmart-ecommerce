@@ -50,6 +50,10 @@ Route::post('/auth/google/test', [SocialAuthController::class, 'testGoogleAuth']
 // Flutterwave webhook (must be public)
 Route::post('/webhooks/flutterwave', [PaymentController::class, 'handleWebhook']);
 
+// Store Locations and Pickup Points
+Route::get('/pickup-locations', [App\Http\Controllers\StoreAddressController::class, 'getPublicPickupLocations']);
+Route::post('/pickup-locations/nearest', [App\Http\Controllers\StoreAddressController::class, 'findNearestPickupLocations']);
+
 // Payment callback routes (must be public)
 Route::get('/payments/callback', [PaymentController::class, 'handleCallback'])->name('payment.callback');
 Route::get('/payment/callback', [PaymentController::class, 'handleCallback'])->name('payment.callback.alt');
@@ -236,6 +240,14 @@ Route::middleware(['auth:sanctum'])->prefix('admin')->group(function () {
     Route::put('/delivery-settings/global', [App\Http\Controllers\Admin\DeliverySettingsController::class, 'updateGlobalSettings']);
     Route::get('/delivery-settings/store/{storeId}', [App\Http\Controllers\Admin\DeliverySettingsController::class, 'getStoreSettings']);
     Route::put('/delivery-settings/store/{storeId}', [App\Http\Controllers\Admin\DeliverySettingsController::class, 'updateStoreSettings']);
+    
+    // Store Address Management
+    Route::get('/store-addresses', [App\Http\Controllers\Admin\StoreAddressController::class, 'index']);
+    Route::post('/store-addresses', [App\Http\Controllers\Admin\StoreAddressController::class, 'store']);
+    Route::get('/store-addresses/{id}', [App\Http\Controllers\Admin\StoreAddressController::class, 'show']);
+    Route::put('/store-addresses/{id}', [App\Http\Controllers\Admin\StoreAddressController::class, 'update']);
+    Route::delete('/store-addresses/{id}', [App\Http\Controllers\Admin\StoreAddressController::class, 'destroy']);
+    Route::get('/pickup-locations', [App\Http\Controllers\Admin\StoreAddressController::class, 'getPickupLocations']);
     
     // Banner Management
     Route::get('/banners', [BannerController::class, 'index']);

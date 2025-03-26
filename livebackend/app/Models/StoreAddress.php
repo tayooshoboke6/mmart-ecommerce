@@ -18,6 +18,7 @@ class StoreAddress extends Model
         'name',
         'address_line1',
         'address_line2',
+        'formatted_address',
         'city',
         'state',
         'postal_code',
@@ -27,14 +28,17 @@ class StoreAddress extends Model
         'latitude',
         'longitude',
         'is_pickup_location',
+        'is_delivery_location',
         'is_active',
         'opening_hours',
         'notes',
         'delivery_base_fee',
         'delivery_price_per_km',
         'free_delivery_threshold',
+        'minimum_order_value',
         'offers_free_delivery',
-        'delivery_radius_km'
+        'delivery_radius_km',
+        'geofence_coordinates'
     ];
 
     /**
@@ -46,6 +50,7 @@ class StoreAddress extends Model
         'latitude' => 'float',
         'longitude' => 'float',
         'is_pickup_location' => 'boolean',
+        'is_delivery_location' => 'boolean',
         'is_active' => 'boolean',
         'offers_free_delivery' => 'boolean',
         'delivery_base_fee' => 'float',

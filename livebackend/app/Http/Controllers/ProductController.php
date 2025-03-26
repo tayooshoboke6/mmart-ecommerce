@@ -6,6 +6,8 @@ use App\Models\Product;
 use App\Models\ProductMeasurement;
 use App\Models\Category;
 use App\Models\ProductImage;
+use App\Models\Order;
+use App\Models\User;
 use App\Services\CloudinaryService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
@@ -1220,7 +1222,7 @@ class ProductController extends Controller
                 
                 'pending_orders' => Order::where('status', 'pending')->count(),
                 
-                'recent_orders' => Order::with('customer')
+                'recent_orders' => Order::with('user')
                     ->orderBy('created_at', 'desc')
                     ->take(5)
                     ->get()
@@ -1228,7 +1230,7 @@ class ProductController extends Controller
                         return [
                             'id' => $order->id,
                             'order_number' => $order->order_number,
-                            'customer_name' => $order->customer ? $order->customer->name : 'Guest',
+                            'customer_name' => $order->user ? $order->user->name : 'Guest',
                             'total' => $order->grand_total,
                             'status' => $order->status,
                             'payment_status' => $order->payment_status,
@@ -1243,8 +1245,8 @@ class ProductController extends Controller
 
             // Get customer stats
             $customerStats = [
-                'total_customers' => Customer::count(),
-                'new_customers' => Customer::where('created_at', '>=', $thirtyDaysAgo)->count()
+                'total_customers' => User::count(),
+                'new_customers' => User::where('created_at', '>=', $thirtyDaysAgo)->count()
             ];
 
             return response()->json([

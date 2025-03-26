@@ -92,7 +92,7 @@ const DealRibbon = styled.div`
   }
   
   &::after {
-    content: '${props => props.discount || "DEAL"}';
+    content: '${props => props.$discount || "DEAL"}';
     position: absolute;
     top: 18px;
     right: -68px;
@@ -282,13 +282,13 @@ const ProductCard = ({ product, viewType = 'grid', showNewBadge = false }) => {
               alt={product.name} 
               onError={(e) => {
                 e.target.onerror = null;
-                e.target.src = `https://via.placeholder.com/300x300?text=${encodeURIComponent(product.name)}`;
+                e.target.src = `https://placehold.co/300x300/e2e8f0/1e293b?text=${encodeURIComponent(product.name.substring(0, 15))}`;
               }}
             />
             
             {product.is_featured && <FeaturedBadge>Featured</FeaturedBadge>}
             {showNewBadge && <NewBadge>NEW</NewBadge>}
-            {hasDiscount && <DealRibbon discount={`${discountPercentage}% OFF`} />}
+            {hasDiscount && <DealRibbon $discount={`${discountPercentage}% OFF`} />}
           </ImageContainer>
           
           <CardContent>
@@ -334,14 +334,14 @@ const ProductCard = ({ product, viewType = 'grid', showNewBadge = false }) => {
               className="w-full h-full object-cover"
               onError={(e) => {
                 e.target.onerror = null;
-                e.target.src = `https://via.placeholder.com/300x300?text=${encodeURIComponent(product.name)}`;
+                e.target.src = `https://placehold.co/300x300/e2e8f0/1e293b?text=${encodeURIComponent(product.name.substring(0, 15))}`;
               }}
             />
           </Link>
           
           {product.is_featured && <FeaturedBadge>Featured</FeaturedBadge>}
           {showNewBadge && <NewBadge>NEW</NewBadge>}
-          {hasDiscount && <DealRibbon discount={`${discountPercentage}% OFF`} />}
+          {hasDiscount && <DealRibbon $discount={`${discountPercentage}% OFF`} />}
         </div>
         
         <div className="p-4 w-full md:w-2/3">

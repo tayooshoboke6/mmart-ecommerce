@@ -25,7 +25,41 @@
       Learn how to configure a non-root public URL by running `npm run build`.
     -->
     <title>MMart Admin</title>
-    <!-- Google Maps API will be loaded dynamically in the app -->
+    <!-- Google Maps API Loading -->
+    <script>
+      console.log('Setting up Google Maps API loader');
+      
+      // Function to load Google Maps API
+      function loadGoogleMapsAPI() {
+        console.log('Loading Google Maps API...');
+        
+        // Create script element
+        const script = document.createElement('script');
+        script.src = 'https://maps.googleapis.com/maps/api/js?key=AIzaSyA8uPmEdNIXnG7TXLMf2iECVp5wAmXczeY&libraries=places,drawing';
+        script.async = true;
+        script.defer = true;
+        
+        // Set up callback for when script loads
+        script.onload = function() {
+          console.log('Google Maps API loaded successfully');
+          window.googleMapsLoaded = true;
+          // Dispatch an event that components can listen for
+          const event = new Event('google-maps-loaded');
+          window.dispatchEvent(event);
+        };
+        
+        // Handle errors
+        script.onerror = function() {
+          console.error('Failed to load Google Maps API');
+        };
+        
+        // Add to document
+        document.head.appendChild(script);
+      }
+      
+      // Load the API when the page loads
+      window.addEventListener('load', loadGoogleMapsAPI);
+    </script>
   </head>
   <body>
     <noscript>You need to enable JavaScript to run this app.</noscript>

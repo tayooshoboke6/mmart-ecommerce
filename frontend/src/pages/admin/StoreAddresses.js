@@ -4,6 +4,7 @@ import { toast, ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import { FaMapMarkerAlt, FaPlus, FaEdit, FaTrash, FaCheck, FaTimes } from 'react-icons/fa';
 import GooglePlacesAutocomplete from '../../components/GooglePlacesAutocomplete';
+import GeofenceMap from '../../components/GeofenceMap';
 import api from '../../services/api';
 
 const StoreAddresses = () => {
@@ -33,7 +34,11 @@ const StoreAddresses = () => {
     delivery_price_per_km: '0',
     delivery_radius_km: '10',
     free_delivery_threshold: '0',
-    offers_free_delivery: false
+    minimum_order_value: '0',
+    offers_free_delivery: false,
+    geofence_coordinates: '',
+    drawing_mode: false,
+    formatted_address: ''
   });
 
   // Fetch store addresses
@@ -107,7 +112,11 @@ const StoreAddresses = () => {
       delivery_price_per_km: '0',
       delivery_radius_km: '10',
       free_delivery_threshold: '0',
-      offers_free_delivery: false
+      minimum_order_value: '0',
+      offers_free_delivery: false,
+      geofence_coordinates: '',
+      drawing_mode: false,
+      formatted_address: ''
     });
     setShowModal(true);
   };
@@ -137,7 +146,11 @@ const StoreAddresses = () => {
       delivery_price_per_km: address.delivery_price_per_km || '0',
       delivery_radius_km: address.delivery_radius_km || '10',
       free_delivery_threshold: address.free_delivery_threshold || '0',
-      offers_free_delivery: address.offers_free_delivery || false
+      minimum_order_value: address.minimum_order_value || '0',
+      offers_free_delivery: address.offers_free_delivery || false,
+      geofence_coordinates: address.geofence_coordinates || '',
+      drawing_mode: address.drawing_mode || false,
+      formatted_address: address.formatted_address || ''
     });
     setShowModal(true);
   };
@@ -190,7 +203,31 @@ const StoreAddresses = () => {
   };
 
   return (
-    <div className="container mx-auto px-4 py-6">
+    <div className="container mx-auto px-4 py-8">
+      <style>
+        {`
+        .toggle-checkbox:checked {
+          right: 0;
+          border-color: #ffffff;
+        }
+        .toggle-checkbox:checked + .toggle-label {
+          background-color: #3b82f6;
+        }
+        .toggle-checkbox {
+          right: 0;
+          z-index: 1;
+          border-color: #e5e7eb;
+          transition: all 0.3s;
+        }
+        .toggle-label {
+          display: block;
+          overflow: hidden;
+          cursor: pointer;
+          border-radius: 9999px;
+          transition: background-color 0.3s;
+        }
+        `}
+      </style>
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-bold">Store Locations</h1>
         <button
@@ -230,9 +267,23 @@ const StoreAddresses = () => {
                       </div>
                     </td>
                     <td className="px-6 py-4">
-                      <div className="text-sm text-gray-900">{address.address_line1}</div>
-                      {address.address_line2 && (
-                        <div className="text-sm text-gray-500">{address.address_line2}</div>
+                      {address.formatted_address ? (
+                        <div>
+                          <div>{address.formatted_address}</div>
+                          <div className="text-xs text-gray-500 mt-1">
+                            {address.address_line1}{address.address_line2 ? `, ${address.address_line2}` : ''}
+                            {address.city && `, ${address.city}`}
+                            {address.state && `, ${address.state}`}
+                            {address.postal_code && ` ${address.postal_code}`}
+                          </div>
+                        </div>
+                      ) : (
+                        <div>
+                          {address.address_line1}{address.address_line2 ? `, ${address.address_line2}` : ''}
+                          <br />
+                          {address.city}{address.state ? `, ${address.state}` : ''}
+                          {address.postal_code && ` ${address.postal_code}`}
+                        </div>
                       )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
@@ -325,6 +376,12 @@ const StoreAddresses = () => {
                 <div className="max-h-[60vh] overflow-y-auto">
                   {activeTab === 'address' && (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {/* Debug output */}
+                      <div className="col-span-2 p-2 bg-gray-100 rounded text-xs overflow-auto max-h-32">
+                        <strong>Debug - Form Data:</strong>
+                        <pre>{JSON.stringify(formData, null, 2)}</pre>
+                      </div>
+                      
                       {/* Name */}
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -346,24 +403,36 @@ const StoreAddresses = () => {
                           Address Line 1*
                         </label>
                         <GooglePlacesAutocomplete
-                          placeholder="Enter address"
-                          className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-primary focus:border-primary"
-                          required={true}
                           value={formData.address_line1}
-                          onChange={(e) => handleChange({ target: { name: 'address_line1', value: e.target.value } })}
-                          onPlaceSelected={(place) => {
-                            // Update form with selected place data
-                            setFormData({
-                              ...formData,
-                              address_line1: place.formattedAddress,
-                              city: place.city || formData.city,
-                              state: place.state || formData.state,
-                              postal_code: place.postalCode || formData.postal_code,
-                              country: place.country || formData.country,
-                              latitude: place.latitude || formData.latitude,
-                              longitude: place.longitude || formData.longitude
+                          onChange={(value) => {
+                            // Only update address_line1 when typing, not when selecting from dropdown
+                            if (!value.includes(',')) {
+                              setFormData({...formData, address_line1: value});
+                            }
+                          }}
+                          onSelect={(addressData) => {
+                            console.log('Address selected in StoreAddresses:', addressData);
+                            // Ensure all fields are updated with the selected address data
+                            setFormData(prevData => {
+                              const newData = {
+                                ...prevData,
+                                address_line1: addressData.address_line1 || prevData.address_line1,
+                                address_line2: addressData.address_line2 || prevData.address_line2,
+                                formatted_address: addressData.formatted_address || prevData.formatted_address,
+                                city: addressData.city || prevData.city,
+                                state: addressData.state || prevData.state,
+                                postal_code: addressData.postal_code || prevData.postal_code,
+                                country: addressData.country || prevData.country,
+                                latitude: addressData.latitude?.toString() || prevData.latitude,
+                                longitude: addressData.longitude?.toString() || prevData.longitude
+                              };
+                              console.log('Previous form data:', prevData);
+                              console.log('New form data after update:', newData);
+                              return newData;
                             });
                           }}
+                          placeholder="Enter address"
+                          className="w-full"
                         />
                       </div>
                       
@@ -381,17 +450,32 @@ const StoreAddresses = () => {
                         />
                       </div>
                       
+                      {/* Full Address */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Full Address (from Google)
+                        </label>
+                        <input
+                          type="text"
+                          name="formatted_address"
+                          value={formData.formatted_address}
+                          onChange={handleChange}
+                          readOnly
+                          className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-primary focus:border-primary"
+                        />
+                        <small className="text-muted">This field is automatically populated from Google Places</small>
+                      </div>
+                      
                       {/* City */}
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">
-                          City*
+                          City
                         </label>
                         <input
                           type="text"
                           name="city"
                           value={formData.city}
                           onChange={handleChange}
-                          required
                           className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-primary focus:border-primary"
                         />
                       </div>
@@ -399,14 +483,13 @@ const StoreAddresses = () => {
                       {/* State */}
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">
-                          State*
+                          State
                         </label>
                         <input
                           type="text"
                           name="state"
                           value={formData.state}
                           onChange={handleChange}
-                          required
                           className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-primary focus:border-primary"
                         />
                       </div>
@@ -525,101 +608,74 @@ const StoreAddresses = () => {
                           className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-primary focus:border-primary"
                         ></textarea>
                       </div>
-                      
-                      {/* Checkboxes */}
-                      <div>
-                        <div className="flex items-center">
-                          <input
-                            type="checkbox"
-                            id="is_pickup_location"
-                            name="is_pickup_location"
-                            checked={formData.is_pickup_location}
-                            onChange={handleChange}
-                            className="h-4 w-4 text-primary focus:ring-primary border-gray-300 rounded"
-                          />
-                          <label htmlFor="is_pickup_location" className="ml-2 block text-sm text-gray-900">
-                            Is Pickup Location
-                          </label>
-                        </div>
-                      </div>
-                      
-                      <div>
-                        <div className="flex items-center">
-                          <input
-                            type="checkbox"
-                            id="is_delivery_location"
-                            name="is_delivery_location"
-                            checked={formData.is_delivery_location}
-                            onChange={handleChange}
-                            className="h-4 w-4 text-primary focus:ring-primary border-gray-300 rounded"
-                          />
-                          <label htmlFor="is_delivery_location" className="ml-2 block text-sm text-gray-900">
-                            Is Delivery Location
-                          </label>
-                        </div>
-                      </div>
-                      
-                      <div>
-                        <div className="flex items-center">
-                          <input
-                            type="checkbox"
-                            id="is_active"
-                            name="is_active"
-                            checked={formData.is_active}
-                            onChange={handleChange}
-                            className="h-4 w-4 text-primary focus:ring-primary border-gray-300 rounded"
-                          />
-                          <label htmlFor="is_active" className="ml-2 block text-sm text-gray-900">
-                            Is Active
-                          </label>
-                        </div>
-                      </div>
                     </div>
                   )}
                   
                   {activeTab === 'delivery' && (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="md:col-span-2 mb-2">
+                    <div className="grid grid-cols-1 gap-4">
+                      <div className="mb-2">
                         <h3 className="text-lg font-medium text-gray-800">Delivery Settings</h3>
                         <p className="text-sm text-gray-600">Configure delivery options for this store location</p>
                       </div>
                       
-                      {/* Delivery Base Fee */}
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Delivery Base Fee
-                        </label>
-                        <input
-                          type="number"
-                          step="0.01"
-                          name="delivery_base_fee"
-                          value={formData.delivery_base_fee}
-                          onChange={handleChange}
-                          className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-primary focus:border-primary"
-                        />
-                        <p className="text-xs text-gray-500 mt-1">Base fee charged for all deliveries</p>
+                      {/* Store Active, Pickup Available, Delivery Available */}
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                        <div>
+                          <div className="flex items-center">
+                            <label className="block text-sm font-medium text-gray-700 mr-2">
+                              Store Active
+                            </label>
+                            <label className="toggle-switch">
+                              <input
+                                type="checkbox"
+                                name="is_active"
+                                checked={formData.is_active}
+                                onChange={handleChange}
+                              />
+                              <span className="toggle-slider"></span>
+                            </label>
+                          </div>
+                        </div>
+                        
+                        <div>
+                          <div className="flex items-center">
+                            <label className="block text-sm font-medium text-gray-700 mr-2">
+                              Pickup Available
+                            </label>
+                            <label className="toggle-switch">
+                              <input
+                                type="checkbox"
+                                name="is_pickup_location"
+                                checked={formData.is_pickup_location}
+                                onChange={handleChange}
+                              />
+                              <span className="toggle-slider"></span>
+                            </label>
+                          </div>
+                        </div>
+                        
+                        <div>
+                          <div className="flex items-center">
+                            <label className="block text-sm font-medium text-gray-700 mr-2">
+                              Delivery Available
+                            </label>
+                            <label className="toggle-switch">
+                              <input
+                                type="checkbox"
+                                name="is_delivery_location"
+                                checked={formData.is_delivery_location}
+                                onChange={handleChange}
+                              />
+                              <span className="toggle-slider"></span>
+                            </label>
+                          </div>
+                        </div>
                       </div>
                       
-                      {/* Delivery Price Per KM */}
+                      {/* Delivery Radius */}
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Delivery Price Per KM
-                        </label>
-                        <input
-                          type="number"
-                          step="0.01"
-                          name="delivery_price_per_km"
-                          value={formData.delivery_price_per_km}
-                          onChange={handleChange}
-                          className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-primary focus:border-primary"
-                        />
-                        <p className="text-xs text-gray-500 mt-1">Additional charge per kilometer</p>
-                      </div>
-                      
-                      {/* Delivery Radius KM */}
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Delivery Radius (KM)
+                          Delivery Radius (km)
                         </label>
                         <input
                           type="number"
@@ -629,39 +685,140 @@ const StoreAddresses = () => {
                           onChange={handleChange}
                           className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-primary focus:border-primary"
                         />
-                        <p className="text-xs text-gray-500 mt-1">Maximum distance for delivery</p>
                       </div>
                       
-                      {/* Free Delivery Threshold */}
+                      {/* Drawing Mode */}
+                      <div>
+                        <div className="flex items-center">
+                          <label className="block text-sm font-medium text-gray-700 mr-2">
+                            Drawing Mode
+                          </label>
+                          <label className="toggle-switch">
+                            <input
+                              type="checkbox"
+                              name="drawing_mode"
+                              checked={formData.drawing_mode}
+                              onChange={handleChange}
+                            />
+                            <span className="toggle-slider"></span>
+                          </label>
+                        </div>
+                      </div>
+                      
+                      {/* Delivery Zone */}
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Free Delivery Threshold
+                          Delivery Zone
                         </label>
-                        <input
-                          type="number"
-                          step="0.01"
-                          name="free_delivery_threshold"
-                          value={formData.free_delivery_threshold}
-                          onChange={handleChange}
-                          className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-primary focus:border-primary"
-                        />
-                        <p className="text-xs text-gray-500 mt-1">Order amount above which delivery is free</p>
+                        <div className="border border-gray-300 rounded-md p-4">
+                          <div className="mb-3">
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              Manual Geofence Coordinates Entry
+                            </label>
+                            <textarea
+                              name="geofence_coordinates"
+                              value={formData.geofence_coordinates}
+                              onChange={handleChange}
+                              rows="4"
+                              className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-primary focus:border-primary"
+                              placeholder="(longitude, latitude)... and form a closed polygon."
+                            ></textarea>
+                            <p className="text-xs text-gray-500 mt-1">
+                              Make sure coordinates are in the format (longitude, latitude)... and form a closed polygon.
+                            </p>
+                          </div>
+                          
+                          {/* Map for drawing geofence */}
+                          <GeofenceMap
+                            initialCoordinates={[]}
+                            onCoordinatesChange={(coords) => 
+                              setFormData({...formData, geofence_coordinates: coords})
+                            }
+                            latitude={formData.latitude}
+                            longitude={formData.longitude}
+                          />
+                        </div>
                       </div>
                       
-                      {/* Offers Free Delivery */}
-                      <div className="md:col-span-2">
-                        <div className="flex items-center">
-                          <input
-                            type="checkbox"
-                            id="offers_free_delivery"
-                            name="offers_free_delivery"
-                            checked={formData.offers_free_delivery}
-                            onChange={handleChange}
-                            className="h-4 w-4 text-primary focus:ring-primary border-gray-300 rounded"
-                          />
-                          <label htmlFor="offers_free_delivery" className="ml-2 block text-sm text-gray-900">
-                            Offers Free Delivery (when threshold is met)
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {/* Delivery Base Fee */}
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Base Delivery Fee (₦)
                           </label>
+                          <div className="relative">
+                            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                              <span className="text-gray-500 sm:text-sm">₦</span>
+                            </div>
+                            <input
+                              type="number"
+                              step="0.01"
+                              name="delivery_base_fee"
+                              value={formData.delivery_base_fee}
+                              onChange={handleChange}
+                              className="w-full border border-gray-300 rounded-md pl-7 pr-3 py-2 focus:outline-none focus:ring-primary focus:border-primary"
+                            />
+                          </div>
+                        </div>
+                        
+                        {/* Delivery Price Per KM */}
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Fee Per Kilometer (₦)
+                          </label>
+                          <div className="relative">
+                            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                              <span className="text-gray-500 sm:text-sm">₦</span>
+                            </div>
+                            <input
+                              type="number"
+                              step="0.01"
+                              name="delivery_price_per_km"
+                              value={formData.delivery_price_per_km}
+                              onChange={handleChange}
+                              className="w-full border border-gray-300 rounded-md pl-7 pr-3 py-2 focus:outline-none focus:ring-primary focus:border-primary"
+                            />
+                          </div>
+                        </div>
+                        
+                        {/* Free Delivery Threshold */}
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Free Delivery Threshold (₦)
+                          </label>
+                          <div className="relative">
+                            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                              <span className="text-gray-500 sm:text-sm">₦</span>
+                            </div>
+                            <input
+                              type="number"
+                              step="0.01"
+                              name="free_delivery_threshold"
+                              value={formData.free_delivery_threshold}
+                              onChange={handleChange}
+                              className="w-full border border-gray-300 rounded-md pl-7 pr-3 py-2 focus:outline-none focus:ring-primary focus:border-primary"
+                            />
+                          </div>
+                        </div>
+                        
+                        {/* Minimum Order Value */}
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Minimum Order Value (₦)
+                          </label>
+                          <div className="relative">
+                            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                              <span className="text-gray-500 sm:text-sm">₦</span>
+                            </div>
+                            <input
+                              type="number"
+                              step="0.01"
+                              name="minimum_order_value"
+                              value={formData.minimum_order_value}
+                              onChange={handleChange}
+                              className="w-full border border-gray-300 rounded-md pl-7 pr-3 py-2 focus:outline-none focus:ring-primary focus:border-primary"
+                            />
+                          </div>
                         </div>
                       </div>
                     </div>
