@@ -20,23 +20,66 @@ class DeliveryFeeService
     public function calculateDeliveryFee(float $subtotal, array $customerLocation, ?int $storeId = null): array
     {
         try {
+            Log::info('DeliveryFeeService: Starting calculation', [
+                'subtotal' => $subtotal,
+                'customerLocation' => $customerLocation,
+                'storeId' => $storeId
+            ]);
+            
+            // Validate customer location
+            if (!isset($customerLocation[0]) || !isset($customerLocation[1]) || 
+                !is_numeric($customerLocation[0]) || !is_numeric($customerLocation[1])) {
+                Log::error('DeliveryFeeService: Invalid customer location', [
+                    'customerLocation' => $customerLocation
+                ]);
+                return $this->getErrorResponse("Invalid customer location");
+            }
+            
             // Get the appropriate store
             $store = $this->getStore($storeId);
             
             if (!$store) {
+                Log::error('DeliveryFeeService: No valid store found for delivery');
                 return $this->getErrorResponse("No valid store found for delivery");
             }
             
+            Log::info('DeliveryFeeService: Found store', [
+                'store_id' => $store->id,
+                'store_name' => $store->name,
+                'store_location' => [$store->latitude, $store->longitude],
+                'delivery_radius_km' => $store->delivery_radius_km
+            ]);
+            
+            // Validate store location
+            if (!is_numeric($store->latitude) || !is_numeric($store->longitude)) {
+                Log::error('DeliveryFeeService: Invalid store coordinates', [
+                    'store_latitude' => $store->latitude,
+                    'store_longitude' => $store->longitude
+                ]);
+                return $this->getErrorResponse("Store location is invalid");
+            }
+            
             // Check if the customer is within delivery zone
+            $storeLocation = [$store->latitude, $store->longitude];
+            $distanceInKm = $this->calculateDistance($customerLocation, $storeLocation);
+            
+            Log::info('DeliveryFeeService: Distance calculation', [
+                'customerLocation' => $customerLocation,
+                'storeLocation' => $storeLocation,
+                'distanceInKm' => $distanceInKm,
+                'delivery_radius_km' => $store->delivery_radius_km
+            ]);
+            
             $withinZone = $this->isWithinDeliveryZone($customerLocation, $store);
             
             if (!$withinZone) {
+                Log::warning('DeliveryFeeService: Customer outside delivery zone', [
+                    'customerLocation' => $customerLocation,
+                    'deliveryRadius' => $store->delivery_radius_km,
+                    'distance' => $distanceInKm
+                ]);
                 return $this->getErrorResponse("Sorry, we don't currently deliver to your location.");
             }
-            
-            // Calculate distance to store
-            $storeLocation = [$store->latitude, $store->longitude];
-            $distanceInKm = $this->calculateDistance($customerLocation, $storeLocation);
             
             // Get global delivery settings
             $globalSettings = $this->getGlobalSettings();
@@ -47,8 +90,20 @@ class DeliveryFeeService
             $freeThreshold = $store->delivery_free_threshold ?? $globalSettings->free_threshold ?? 10000; // Default: Free for orders over ₦10,000
             $minOrder = $store->delivery_min_order ?? $globalSettings->min_order ?? 0; // Default: No minimum order
             
+            Log::info('DeliveryFeeService: Delivery settings', [
+                'baseFee' => $baseFee,
+                'feePerKm' => $feePerKm,
+                'freeThreshold' => $freeThreshold,
+                'minOrder' => $minOrder,
+                'subtotal' => $subtotal
+            ]);
+            
             // Check if order meets minimum requirement
             if ($subtotal < $minOrder) {
+                Log::warning('DeliveryFeeService: Order below minimum', [
+                    'subtotal' => $subtotal,
+                    'minOrder' => $minOrder
+                ]);
                 return $this->getErrorResponse(
                     "Minimum order for delivery is ₦" . number_format($minOrder) . ". Please add more items.",
                     $distanceInKm
@@ -70,12 +125,20 @@ class DeliveryFeeService
             // Estimate delivery time (5 minutes + 3 minutes per km)
             $estimatedTime = 5 + ceil($distanceInKm * 3);
             
+            Log::info('DeliveryFeeService: Fee calculation results', [
+                'baseFee' => $baseFee,
+                'distanceFee' => $distanceFee,
+                'totalFee' => $fee,
+                'estimatedTime' => $estimatedTime,
+                'isFreeDelivery' => $subtotal >= $freeThreshold
+            ]);
+            
             // Prepare message based on fee
             $message = $fee === 0
                 ? "Free delivery for your order!"
                 : "Delivery fee: ₦" . number_format($fee) . " (" . number_format($distanceInKm, 1) . " km)";
             
-            return [
+            $result = [
                 'fee' => $fee,
                 'distance' => $distanceInKm,
                 'currency' => 'NGN',
@@ -84,6 +147,10 @@ class DeliveryFeeService
                 'message' => $message,
                 'store_id' => $store->id
             ];
+            
+            Log::info('DeliveryFeeService: Returning result', $result);
+            
+            return $result;
         } catch (\Exception $e) {
             Log::error('Error calculating delivery fee: ' . $e->getMessage());
             return $this->getErrorResponse("Unable to calculate delivery fee");
@@ -104,7 +171,7 @@ class DeliveryFeeService
         
         // If no store ID provided, get the first active store
         return StoreAddress::where('is_active', true)
-            ->where('delivery_enabled', true)
+            ->where('is_delivery_location', true)
             ->first();
     }
     
@@ -136,12 +203,25 @@ class DeliveryFeeService
         // Use store-specific radius if available, otherwise use global max distance
         $radius = $store->delivery_radius_km ?? $maxDistance;
         
+        Log::info('DeliveryFeeService: Checking delivery zone', [
+            'store_delivery_radius' => $store->delivery_radius_km,
+            'global_max_distance' => $maxDistance,
+            'effective_radius' => $radius
+        ]);
+        
         if (!$radius) {
+            Log::warning('DeliveryFeeService: No delivery radius defined');
             return false;
         }
         
         $storeLocation = [$store->latitude, $store->longitude];
         $distance = $this->calculateDistance($customerLocation, $storeLocation);
+        
+        Log::info('DeliveryFeeService: Distance check', [
+            'distance' => $distance,
+            'radius' => $radius,
+            'within_radius' => $distance <= $radius
+        ]);
         
         return $distance <= $radius;
     }
@@ -160,6 +240,26 @@ class DeliveryFeeService
         $lat2 = $point2[0];
         $lon2 = $point2[1];
         
+        Log::info('DeliveryFeeService: Distance calculation inputs', [
+            'point1' => $point1,
+            'point2' => $point2,
+            'lat1' => $lat1,
+            'lon1' => $lon1,
+            'lat2' => $lat2,
+            'lon2' => $lon2
+        ]);
+        
+        // Validate coordinates
+        if (!is_numeric($lat1) || !is_numeric($lon1) || !is_numeric($lat2) || !is_numeric($lon2)) {
+            Log::error('DeliveryFeeService: Invalid coordinates for distance calculation', [
+                'lat1' => $lat1,
+                'lon1' => $lon1,
+                'lat2' => $lat2,
+                'lon2' => $lon2
+            ]);
+            return 0;
+        }
+        
         $earthRadius = 6371; // Earth's radius in kilometers
         
         $dLat = deg2rad($lat2 - $lat1);
@@ -171,6 +271,16 @@ class DeliveryFeeService
              
         $c = 2 * atan2(sqrt($a), sqrt(1-$a));
         $distance = $earthRadius * $c;
+        
+        Log::info('DeliveryFeeService: Distance calculation result', [
+            'distance_km' => $distance,
+            'calculation_details' => [
+                'dLat' => $dLat,
+                'dLon' => $dLon,
+                'a' => $a,
+                'c' => $c
+            ]
+        ]);
         
         return $distance;
     }

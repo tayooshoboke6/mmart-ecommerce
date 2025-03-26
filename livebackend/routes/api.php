@@ -24,6 +24,8 @@ use App\Http\Controllers\Admin\MessageCampaignController;
 use App\Http\Controllers\UserNotificationController;
 use App\Http\Controllers\Admin\OrderController as AdminOrderController;
 use App\Http\Controllers\Admin\UserController;
+use App\Http\Controllers\Admin\PromotionalSmsController;
+use App\Http\Controllers\TaxSettingsController;
 
 /*
 |--------------------------------------------------------------------------
@@ -134,6 +136,21 @@ Route::get('/test-email', function (Request $request) {
     }
 });
 
+// Public settings endpoint for tax rate
+Route::get('/settings', function (Request $request) {
+    $keys = $request->query('keys', []);
+    $settings = [];
+    
+    if (!empty($keys)) {
+        $settings = \App\Models\Setting::whereIn('key', $keys)->get();
+    }
+    
+    return response()->json([
+        'success' => true,
+        'data' => $settings
+    ]);
+});
+
 // Protected routes
 Route::middleware('auth:sanctum')->group(function () {
     // User profile
@@ -159,6 +176,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::put('/users/{userId}/addresses/{addressId}', [AddressController::class, 'update']);
     Route::delete('/users/{userId}/addresses/{addressId}', [AddressController::class, 'destroy']);
     Route::patch('/users/{userId}/addresses/{addressId}/default', [AddressController::class, 'setDefault']);
+    Route::patch('/users/{userId}/addresses/{addressId}/coordinates', [AddressController::class, 'updateCoordinates']);
     
     // Cart
     Route::get('/cart', [CartController::class, 'index']);
@@ -335,6 +353,14 @@ Route::middleware(['auth:sanctum'])->prefix('admin')->group(function () {
     Route::post('/messages/campaigns/{id}/send', [MessageCampaignController::class, 'send']);
     Route::get('/users/segments', [MessageCampaignController::class, 'getUserSegments']);
     
+    // Promotional SMS
+    Route::prefix('promotional-sms')->group(function () {
+        Route::post('/send-coupon', [PromotionalSmsController::class, 'sendCouponSms']);
+        Route::post('/send-custom', [PromotionalSmsController::class, 'sendCustomSms']);
+        Route::get('/customers', [PromotionalSmsController::class, 'getCustomersWithPhones']);
+        Route::get('/coupons', [PromotionalSmsController::class, 'getAvailableCoupons']);
+    });
+    
     // User Management
     Route::get('/users', [\App\Http\Controllers\Admin\UserController::class, 'index']);
     Route::post('/users', [\App\Http\Controllers\Admin\UserController::class, 'store']);
@@ -348,8 +374,61 @@ Route::middleware(['auth:sanctum'])->prefix('admin')->group(function () {
 Route::get('/debug/user', function (Request $request) {
     return response()->json([
         'user' => $request->user(),
-        'is_authenticated' => auth()->check(),
-        'token' => $request->bearerToken(),
-        'headers' => $request->headers->all()
+        'ip' => $request->ip(),
+        'agent' => $request->userAgent(),
     ]);
-})->middleware('auth:sanctum');
+});
+
+// Debug route for delivery fee calculation
+Route::get('/debug/delivery-fee', function (Request $request) {
+    $customerLocation = [6.4376918, 3.4095396]; // Example coordinates from updated address
+    $storeLocation = [6.4425335, 3.4908136]; // Example coordinates from active store
+    $subtotal = 932.66; // Example subtotal from logs
+    
+    $deliveryService = new \App\Services\DeliveryFeeService();
+    
+    // Get the store
+    $store = \App\Models\StoreAddress::where('is_active', true)
+        ->where('is_delivery_location', true)
+        ->first();
+        
+    if (!$store) {
+        return response()->json(['error' => 'No active delivery store found']);
+    }
+    
+    // Calculate distance manually
+    $lat1 = $customerLocation[0];
+    $lon1 = $customerLocation[1];
+    $lat2 = $store->latitude;
+    $lon2 = $store->longitude;
+    
+    $earthRadius = 6371; // Radius of the earth in km
+    $dLat = deg2rad($lat2 - $lat1);
+    $dLon = deg2rad($lon2 - $lon1);
+    $a = sin($dLat/2) * sin($dLat/2) + cos(deg2rad($lat1)) * cos(deg2rad($lat2)) * sin($dLon/2) * sin($dLon/2);
+    $c = 2 * atan2(sqrt($a), sqrt(1-$a));
+    $distance = $earthRadius * $c; // Distance in km
+    
+    // Check if within delivery radius
+    $withinRadius = $distance <= $store->delivery_radius_km;
+    
+    // Calculate delivery fee
+    $result = $deliveryService->calculateDeliveryFee($subtotal, $customerLocation);
+    
+    return response()->json([
+        'debug_info' => [
+            'customer_location' => $customerLocation,
+            'store_location' => [$store->latitude, $store->longitude],
+            'store_details' => $store,
+            'manual_distance_calculation' => [
+                'distance_km' => $distance,
+                'within_delivery_radius' => $withinRadius,
+                'delivery_radius_km' => $store->delivery_radius_km
+            ]
+        ],
+        'delivery_fee_result' => $result
+    ]);
+});
+
+// Delivery fee debug route
+Route::get('/delivery-fee/debug', [DeliveryFeeController::class, 'debugCalculateDeliveryFee']);

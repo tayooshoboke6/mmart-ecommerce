@@ -17,7 +17,8 @@ class Setting extends Model
     protected $fillable = [
         'key',
         'value',
-        'group'
+        'group',
+        'description'
     ];
     
     /**
@@ -32,11 +33,11 @@ class Setting extends Model
     }
     
     /**
-     * Get a specific setting value
+     * Get a setting value by key
      *
      * @param string $key
-     * @param mixed $default
-     * @return mixed
+     * @param string $default
+     * @return string
      */
     public static function getValue($key, $default = null)
     {

@@ -9,6 +9,8 @@ use App\Models\ProductImage;
 use App\Models\Order;
 use App\Models\User;
 use App\Services\CloudinaryService;
+use App\Services\NotificationService;
+use App\Models\Setting;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
@@ -304,21 +306,29 @@ class ProductController extends Controller
     /**
      * Display the specified product.
      *
-     * @param  string  $id
+     * @param  string  $idOrSlug
      * @return \Illuminate\Http\Response
      */
-    public function show($id)
+    public function show($idOrSlug)
     {
         // Generate a cache key for this specific product
-        $cacheKey = $this->getCacheKey('_show_' . $id);
+        $cacheKey = $this->getCacheKey('_show_' . $idOrSlug);
         $this->addCacheKey($cacheKey);
 
         // Try to get from cache first
-        return Cache::remember($cacheKey, $this->cacheDuration, function () use ($id) {
-            $product = Product::with(['category', 'measurements', 'images'])->findOrFail($id);
+        return Cache::remember($cacheKey, $this->cacheDuration, function () use ($idOrSlug) {
+            // Try to find by ID first
+            if (is_numeric($idOrSlug)) {
+                $product = Product::with(['category', 'measurements', 'images'])->findOrFail($idOrSlug);
+            } else {
+                // If not numeric, try to find by slug
+                $product = Product::with(['category', 'measurements', 'images'])
+                    ->where('slug', $idOrSlug)
+                    ->firstOrFail();
+            }
 
             // Log the response for debugging
-            Log::info('Product detail response for ID: ' . $id, [
+            Log::info('Product detail response for ID/Slug: ' . $idOrSlug, [
                 'product' => $product->toArray()
             ]);
 
@@ -554,6 +564,9 @@ class ProductController extends Controller
             
             // Update the product with the filtered data
             $product->update($updateData);
+            
+            // Check if stock is low and send alert if needed
+            $this->checkAndSendLowStockAlert($product);
             
             // Create measurements if provided
             if ($request->has('measurements')) {
@@ -1401,6 +1414,42 @@ class ProductController extends Controller
                 'status' => 'error',
                 'message' => 'Failed to generate template: ' . $e->getMessage()
             ], 500);
+        }
+    }
+
+    /**
+     * Check if stock is low and send alert if needed
+     *
+     * @param Product $product
+     */
+    private function checkAndSendLowStockAlert(Product $product)
+    {
+        try {
+            // Get low stock threshold from settings or use default value
+            $threshold = (int)Setting::getValue('low_stock_threshold', 10);
+            
+            // Check if product stock is below threshold
+            if ($product->stock_quantity <= $threshold) {
+                Log::info("Low stock detected for product #{$product->id}: {$product->name}", [
+                    'product_id' => $product->id,
+                    'product_name' => $product->name,
+                    'current_stock' => $product->stock_quantity,
+                    'threshold' => $threshold
+                ]);
+                
+                // Send email notification
+                NotificationService::sendLowStockAlert($product, $threshold);
+                
+                // Send SMS notification
+                NotificationService::sendLowStockAlertSms($product, $threshold);
+                
+                return true;
+            }
+            
+            return false;
+        } catch (\Exception $e) {
+            Log::error("Error checking low stock for product #{$product->id}: " . $e->getMessage());
+            return false;
         }
     }
 }

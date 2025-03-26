@@ -9,6 +9,7 @@ use App\Models\Product;
 use App\Models\Coupon;
 use App\Models\Location;
 use App\Services\DeliveryFeeService;
+use App\Services\NotificationService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\DB;
@@ -301,14 +302,26 @@ class OrderController extends Controller
                         'customer_email' => $customerEmail
                     ]);
                     
-                    Mail::to($customerEmail)->send(new \App\Mail\OrderConfirmationMail($order));
+                    // Use NotificationService instead of direct Mail call
+                    $emailSent = NotificationService::sendOrderConfirmation($order);
                     
-                    \Log::info('Order confirmation email sent successfully', [
-                        'order_id' => $order->id,
-                        'customer_email' => $customerEmail
-                    ]);
+                    if ($emailSent) {
+                        \Log::info('Order confirmation email sent successfully', [
+                            'order_id' => $order->id,
+                            'customer_email' => $customerEmail
+                        ]);
+                    }
                     
-                    $emailSent = true;
+                    // Send SMS notification as well
+                    $smsSent = NotificationService::sendOrderConfirmationSms($order);
+                    
+                    if ($smsSent) {
+                        \Log::info('Order confirmation SMS sent successfully', [
+                            'order_id' => $order->id,
+                            'customer_phone' => $order->user->phone ?? 'N/A'
+                        ]);
+                    }
+                    
                 } catch (\Exception $e) {
                     \Log::error('Failed to send order confirmation email', [
                         'order_id' => $order->id,

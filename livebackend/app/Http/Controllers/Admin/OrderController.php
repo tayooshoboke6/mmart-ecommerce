@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\User;
+use App\Services\NotificationService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -178,6 +179,22 @@ class OrderController extends Controller
             
             // Log status change
             Log::info("Order #{$order->order_number} status changed from {$oldStatus} to {$newStatus} by admin");
+            
+            // Send order status update email to customer
+            try {
+                NotificationService::sendOrderStatusUpdate($order, $oldStatus, $newStatus);
+                Log::info("Order status update email sent for order #{$order->order_number}");
+            } catch (\Exception $e) {
+                Log::error("Failed to send order status update email: " . $e->getMessage());
+            }
+            
+            // Send order status update SMS to customer
+            try {
+                NotificationService::sendOrderStatusUpdateSms($order, $oldStatus, $newStatus);
+                Log::info("Order status update SMS sent for order #{$order->order_number}");
+            } catch (\Exception $e) {
+                Log::error("Failed to send order status update SMS: " . $e->getMessage());
+            }
             
             return response()->json([
                 'status' => 'success',

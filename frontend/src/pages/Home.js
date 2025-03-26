@@ -6,14 +6,17 @@ import { formatNaira } from '../utils/formatters';
 import Slider from 'react-slick';
 import 'slick-carousel/slick/slick.css';
 import 'slick-carousel/slick/slick-theme.css';
+import { useCart } from '../context/CartContext';
 
 const Home = () => {
   const [featuredProducts, setFeaturedProducts] = useState([]);
   const [newArrivals, setNewArrivals] = useState([]);
   const [bestSellers, setBestSellers] = useState([]);
+  const [hotDeals, setHotDeals] = useState([]);
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const { addToCart } = useCart();
 
   useEffect(() => {
     const fetchHomeData = async () => {
@@ -271,6 +274,39 @@ const Home = () => {
         // Combine real and mock products - real products first
         setBestSellers([...realBestSellers, ...mockBestSellers]);
 
+        // Fetch hot deals
+        let realHotDeals = [];
+        try {
+          const response = await ProductService.getProductsByType('hot_deals');
+          // Map API response fields to match component expectations
+          realHotDeals = (response.products || []).map(product => {
+            // Calculate discount percentage if not provided
+            const discountPercentage = product.discount_percentage || 
+              (product.base_price && product.sale_price ? 
+                Math.round(((parseFloat(product.base_price) - parseFloat(product.sale_price)) / parseFloat(product.base_price)) * 100) : 0);
+            
+            // Log product discount information for debugging
+            console.log(`Product: ${product.name}, Base: ${product.base_price}, Sale: ${product.sale_price}, Discount: ${discountPercentage}%`);
+            
+            return {
+              ...product,
+              is_featured: product.is_featured || false,
+              is_new_arrival: product.is_new_arrival || false,
+              is_hot_deal: product.is_hot_deal || true,
+              is_in_stock: product.is_in_stock || (product.stock_quantity > 0),
+              is_on_sale: product.is_on_sale || (product.sale_price && product.base_price && parseFloat(product.sale_price) < parseFloat(product.base_price)),
+              discount_percentage: discountPercentage
+            };
+          });
+          console.log('Fetched real hot deals:', realHotDeals);
+        } catch (apiError) {
+          console.log('API call for hot deals failed:', apiError);
+        }
+        
+        // Use the mock data for hot deals if the API call fails or returns empty
+        const mockHotDeals = mockBestSellers.filter(product => product.discount_percentage > 0);
+        setHotDeals(realHotDeals.length > 0 ? realHotDeals : mockHotDeals);
+
         // Mock categories
         const mockCategories = [
           {
@@ -291,7 +327,7 @@ const Home = () => {
             id: 3,
             name: 'Fashion',
             slug: 'fashion',
-            image_url: 'https://images.unsplash.com/photo-1445205170230-053b83016050?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1471&q=80',
+            image_url: 'https://images.unsplash.com/photo-1445205170230-76b7b1e5a7a5?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1471&q=80',
             product_count: 150
           },
           {
@@ -699,18 +735,19 @@ const Home = () => {
               ]}
               className="hot-deals-slider"
             >
-              {bestSellers
-                .filter(product => product.discount_percentage > 0)
+              {hotDeals
                 .slice(0, 14)
                 .map((product) => (
                   <div key={product.id} className="px-0.5 py-1">
-                    <div className="bg-white rounded-lg shadow-sm hover:shadow-md transition-all duration-300 overflow-hidden h-full flex flex-col group">
-                      {/* Discount Badge */}
-                      {product.discount_percentage > 0 && (
-                        <div className="absolute top-2 right-2 z-10">
-                          <div className="bg-red-500 text-white text-xs font-bold px-2 py-1 rounded-md">
-                            {product.discount_percentage}% OFF
-                          </div>
+                    <div className="bg-white rounded-lg shadow-sm hover:shadow-md transition-all duration-300 overflow-hidden h-full flex flex-col group relative">
+                      {/* Discount Badge - Updated to use ribbon style like in Featured Products */}
+                      {((product.sale_price && parseFloat(product.sale_price) < parseFloat(product.base_price)) || 
+                        (product.discount_percentage && parseFloat(product.discount_percentage) > 0)) && (
+                        <div className="absolute top-0 right-0 w-0 h-0 border-solid border-t-0 border-r-[80px] border-b-[80px] border-l-0 border-transparent border-r-[#dc2626] border-b-transparent z-10">
+                          <span className="absolute top-[18px] right-[-68px] text-white text-[11px] font-bold transform rotate-45 uppercase">
+                            {product.discount_percentage || 
+                             Math.round(((parseFloat(product.base_price) - parseFloat(product.sale_price)) / parseFloat(product.base_price)) * 100)}% OFF
+                          </span>
                         </div>
                       )}
                       
@@ -726,7 +763,14 @@ const Home = () => {
                           }}
                         />
                         <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-5 transition-all duration-300"></div>
-                        <button className="absolute bottom-0 left-0 right-0 bg-[#3B82F6] text-white py-2 translate-y-full group-hover:translate-y-0 transition-transform duration-300 text-sm font-medium">
+                        <button 
+                          className="absolute bottom-0 left-0 right-0 bg-[#3B82F6] text-white py-2 translate-y-full group-hover:translate-y-0 transition-transform duration-300 text-sm font-medium"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            addToCart(product, 1);
+                          }}
+                        >
                           Add to Cart
                         </button>
                       </div>
@@ -763,7 +807,7 @@ const Home = () => {
                             onClick={(e) => {
                               e.preventDefault();
                               e.stopPropagation();
-                              // Add to cart functionality
+                              addToCart(product, 1);
                             }}
                           >
                             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">

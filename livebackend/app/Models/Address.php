@@ -23,7 +23,9 @@ class Address extends Model
         'state',
         'postal_code',
         'country',
-        'is_default'
+        'is_default',
+        'latitude',
+        'longitude'
     ];
 
     /**
@@ -33,6 +35,8 @@ class Address extends Model
      */
     protected $casts = [
         'is_default' => 'boolean',
+        'latitude' => 'float',
+        'longitude' => 'float'
     ];
 
     /**

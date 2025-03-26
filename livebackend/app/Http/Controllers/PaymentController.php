@@ -6,10 +6,10 @@ use App\Models\Order;
 use App\Models\Payment;
 use App\Models\User;
 use App\Mail\OrderConfirmationMail;
+use App\Services\NotificationService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Validator;
 use GuzzleHttp\Client;
 
@@ -383,7 +383,7 @@ class PaymentController extends Controller
                                             'user_email' => $user->email
                                         ]);
                                         
-                                        Mail::to($user->email)->send(new OrderConfirmationMail($payment->order));
+                                        NotificationService::sendOrderConfirmation($payment->order);
                                         
                                         Log::info('Order confirmation email sent successfully', [
                                             'order_id' => $payment->order->id,
@@ -473,7 +473,7 @@ class PaymentController extends Controller
                                         'user_email' => $user->email
                                     ]);
                                     
-                                    Mail::to($user->email)->send(new OrderConfirmationMail($payment->order));
+                                    NotificationService::sendOrderConfirmation($payment->order);
                                     
                                     Log::info('Order confirmation email sent successfully', [
                                         'order_id' => $payment->order->id,
@@ -589,7 +589,7 @@ class PaymentController extends Controller
                                 'user_email' => $user->email
                             ]);
                             
-                            Mail::to($user->email)->send(new OrderConfirmationMail($order));
+                            NotificationService::sendOrderConfirmation($order);
                             
                             Log::info('Order confirmation email sent successfully', [
                                 'order_id' => $order->id,
@@ -852,7 +852,7 @@ class PaymentController extends Controller
                                     'user_email' => $user->email
                                 ]);
                                 
-                                Mail::to($user->email)->send(new OrderConfirmationMail($order));
+                                NotificationService::sendOrderConfirmation($order);
                                 
                                 Log::info('Order confirmation email sent successfully', [
                                     'order_id' => $order->id,

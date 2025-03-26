@@ -29,6 +29,8 @@ import Categories from './pages/admin/Categories';
 import Orders from './pages/admin/Orders';
 import Users from './pages/admin/Users';
 import StoreAddresses from './pages/admin/StoreAddresses';
+import Banners from './pages/admin/Banners';
+import Settings from './pages/admin/Settings';
 
 // Import pages (to be created)
 const NotFound = () => <div className="container mx-auto px-4 py-8">Page Not Found</div>;
@@ -69,6 +71,16 @@ function App() {
               <Route path="/admin/store-addresses" element={
                 <AdminLayout>
                   <StoreAddresses />
+                </AdminLayout>
+              } />
+              <Route path="/admin/banners" element={
+                <AdminLayout>
+                  <Banners />
+                </AdminLayout>
+              } />
+              <Route path="/admin/settings" element={
+                <AdminLayout>
+                  <Settings />
                 </AdminLayout>
               } />
               

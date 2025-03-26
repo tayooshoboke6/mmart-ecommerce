@@ -1,34 +1,110 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
 import Button from '../components/ui/Button';
 import { formatNaira } from '../utils/formatters';
+import AddressSelector from '../components/address/AddressSelector';
+import DeliveryMethodSelector from '../components/delivery/DeliveryMethodSelector';
+import AddressService from '../services/address.service';
+import CartService from '../services/cart.service';
+import axios from 'axios';
 
 const Cart = () => {
-  const { cartItems, loading, error, updateCartItem, removeCartItem, clearCart } = useCart();
-  const { isAuthenticated } = useAuth();
+  const { cartItems, loading, error, updateCartItem, removeCartItem, clearCart, setCartItems } = useCart();
+  const { isAuthenticated, user } = useAuth();
   const navigate = useNavigate();
   
   const [couponCode, setCouponCode] = useState('');
   const [couponError, setCouponError] = useState('');
   const [couponSuccess, setCouponSuccess] = useState('');
   const [couponLoading, setCouponLoading] = useState(false);
-  
-  // Calculate cart totals
-  const subtotal = cartItems.reduce((total, item) => {
-    console.log('Calculating total for item:', item);
+  const [addresses, setAddresses] = useState([]);
+  const [selectedAddressId, setSelectedAddressId] = useState(null);
+  const [selectedAddress, setSelectedAddress] = useState(null);
+  const [deliveryMethod, setDeliveryMethod] = useState('delivery');
+  const [shippingFee, setShippingFee] = useState(0);
+  const [deliveryInfo, setDeliveryInfo] = useState(null);
+  const [taxRate, setTaxRate] = useState(0);
+  const [isLoading, setIsLoading] = useState(false);
+  const [checkoutError, setCheckoutError] = useState('');
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        setIsLoading(true);
+        
+        // Only fetch addresses if user is authenticated
+        if (isAuthenticated && user?.id) {
+          try {
+            const { addresses: userAddresses } = await AddressService.getUserAddresses(user.id);
+            setAddresses(userAddresses);
+            
+            // Set default address if available
+            const defaultAddress = userAddresses.find(addr => addr.is_default);
+            if (defaultAddress) {
+              setSelectedAddress(defaultAddress);
+              setSelectedAddressId(defaultAddress.id);
+            }
+          } catch (error) {
+            console.error('Error fetching addresses:', error);
+          }
+        }
+        
+        // Fetch tax rate from settings
+        try {
+          const settingsResponse = await axios.get('http://localhost:8000/api/settings', {
+            params: { keys: ['tax_rate'] }
+          });
+          
+          console.log('Tax settings API response:', settingsResponse.data);
+          
+          if (settingsResponse.data && settingsResponse.data.success) {
+            const taxRateSetting = settingsResponse.data.data.find(s => s.key === 'tax_rate');
+            console.log('Tax rate setting found:', taxRateSetting);
+            
+            if (taxRateSetting) {
+              const parsedTaxRate = parseFloat(taxRateSetting.value) || 0;
+              console.log('Parsed tax rate:', parsedTaxRate);
+              setTaxRate(parsedTaxRate);
+            }
+          }
+        } catch (error) {
+          console.error('Error fetching tax rate:', error);
+          // Default to 0% tax if settings can't be fetched
+          setTaxRate(0);
+        }
+        
+        setIsLoading(false);
+      } catch (error) {
+        console.error('Error fetching data:', error);
+        setIsLoading(false);
+      }
+    };
     
-    // Access price from the nested product object
-    const product = item.product || {};
-    const itemPrice = parseFloat(product.sale_price) || parseFloat(product.base_price) || 0;
-    
-    console.log('Item price:', itemPrice, 'Quantity:', item.quantity, 'Total for item:', itemPrice * item.quantity);
-    return total + (itemPrice * item.quantity);
-  }, 0);
+    fetchData();
+  }, [isAuthenticated, user]);
+
+  // Calculate subtotal
+  const subtotal = useMemo(() => {
+    return cartItems.reduce((total, item) => {
+      const product = item.product || {};
+      const itemPrice = parseFloat(product.sale_price) || parseFloat(product.base_price) || 0;
+      return total + (itemPrice * item.quantity);
+    }, 0);
+  }, [cartItems]);
   
-  const shippingFee = subtotal > 10000 ? 0 : 1500; // Free shipping for orders over ₦10,000
-  const total = subtotal + shippingFee;
+  // Calculate tax amount
+  const taxAmount = useMemo(() => {
+    const calculatedTax = subtotal * (taxRate / 100);
+    console.log('Tax calculation:', { subtotal, taxRate, calculatedTax });
+    return calculatedTax;
+  }, [subtotal, taxRate]);
+  
+  // Calculate total
+  const total = useMemo(() => {
+    return subtotal + taxAmount + shippingFee;
+  }, [subtotal, taxAmount, shippingFee]);
   
   // Handle quantity change
   const handleQuantityChange = (itemId, newQuantity) => {
@@ -79,17 +155,74 @@ const Cart = () => {
     }, 1000);
   };
   
-  // Handle proceed to checkout
-  const handleCheckout = () => {
-    if (isAuthenticated) {
-      navigate('/checkout');
+  // Handle address selection
+  const handleAddressSelect = async (addressId) => {
+    setSelectedAddressId(addressId);
+    
+    if (addressId) {
+      try {
+        // Fetch the full address details to get latitude and longitude
+        const response = await AddressService.getAddress(addressId);
+        if (response && response.success && response.address) {
+          setSelectedAddress(response.address);
+        } else {
+          console.error('Failed to get address details:', response?.message);
+          setSelectedAddress(null);
+        }
+      } catch (error) {
+        console.error('Error fetching address details:', error);
+        setSelectedAddress(null);
+      }
     } else {
-      navigate('/login', { state: { from: { pathname: '/checkout' } } });
+      setSelectedAddress(null);
     }
   };
   
+  // Handle delivery method change
+  const handleDeliveryMethodChange = (method) => {
+    setDeliveryMethod(method);
+  };
+  
+  // Handle delivery fee calculation
+  const handleDeliveryFeeCalculated = (fee, info) => {
+    setShippingFee(fee);
+    setDeliveryInfo(info);
+  };
+  
+  // Handle checkout
+  const handleCheckout = () => {
+    if (cartItems.length === 0) return;
+    
+    // If user is authenticated and delivery is selected, make sure they have selected an address
+    if (isAuthenticated && deliveryMethod === 'delivery' && !selectedAddressId) {
+      // Show error message
+      setCheckoutError('Please select a delivery address before proceeding to checkout');
+      // Scroll to address selector
+      window.scrollTo({
+        top: document.querySelector('.AddressSelector')?.offsetTop - 100 || 0,
+        behavior: 'smooth'
+      });
+      return;
+    }
+    
+    // Clear any previous checkout errors
+    setCheckoutError('');
+    
+    // Store selected address ID in localStorage for use in checkout
+    if (isAuthenticated && selectedAddressId) {
+      localStorage.setItem('selectedAddressId', selectedAddressId);
+      localStorage.setItem('deliveryMethod', deliveryMethod);
+      
+      if (deliveryMethod === 'pickup' && deliveryInfo && deliveryInfo.store_id) {
+        localStorage.setItem('pickupStoreId', deliveryInfo.store_id);
+      }
+    }
+    
+    navigate('/checkout');
+  };
+  
   // Empty cart view
-  if (!loading && cartItems.length === 0) {
+  if (!isLoading && cartItems.length === 0) {
     return (
       <div className="bg-gray-50 py-8">
         <div className="container mx-auto px-4">
@@ -135,7 +268,7 @@ const Cart = () => {
               </div>
               
               {/* Loading state */}
-              {loading ? (
+              {isLoading ? (
                 <div className="p-6">
                   <div className="animate-pulse space-y-6">
                     {[1, 2].map((item) => (
@@ -331,52 +464,82 @@ const Cart = () => {
                   )}
                 </form>
                 
+                {/* Address Selector for authenticated users */}
+                {isAuthenticated && (
+                  <div className="mb-6">
+                    <div className="AddressSelector">
+                      <AddressSelector 
+                        onAddressSelect={handleAddressSelect} 
+                        selectedAddressId={selectedAddressId} 
+                      />
+                    </div>
+                  </div>
+                )}
+                
+                {/* Delivery Method Selector */}
+                {isAuthenticated && (
+                  <DeliveryMethodSelector
+                    selectedAddress={selectedAddress}
+                    setSelectedAddress={setSelectedAddress}
+                    subtotal={subtotal}
+                    onDeliveryFeeCalculated={handleDeliveryFeeCalculated}
+                    selectedMethod={deliveryMethod}
+                    onMethodChange={handleDeliveryMethodChange}
+                  />
+                )}
+                
                 {/* Summary details */}
                 <div className="space-y-4">
                   <div className="flex justify-between">
                     <span className="text-gray-600">Subtotal</span>
                     <span className="font-medium">{formatNaira(subtotal)}</span>
                   </div>
-                  
                   <div className="flex justify-between">
-                    <span className="text-gray-600">Shipping</span>
-                    {shippingFee > 0 ? (
-                      <span className="font-medium">{formatNaira(shippingFee)}</span>
-                    ) : (
-                      <span className="font-medium text-green-600">Free</span>
-                    )}
+                    <span className="text-gray-600">
+                      VAT Tax{taxAmount > 0 ? ` (${taxRate}%)` : ''}
+                    </span>
+                    <span className="font-medium">{formatNaira(taxAmount)}</span>
                   </div>
-                  
-                  {/* Coupon discount would go here */}
-                  {couponSuccess && (
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">Discount (10%)</span>
-                      <span className="font-medium text-red-600">-{formatNaira(subtotal * 0.1)}</span>
-                    </div>
-                  )}
-                  
-                  <div className="border-t border-gray-200 pt-4 flex justify-between">
-                    <span className="text-lg font-bold">Total</span>
-                    <span className="text-lg font-bold text-primary">
-                      {couponSuccess 
-                        ? formatNaira(total - (subtotal * 0.1)) 
-                        : formatNaira(total)
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Delivery Fee</span>
+                    <span>
+                      {deliveryMethod === 'pickup' 
+                        ? 'Free (Pickup)' 
+                        : shippingFee === 0 
+                          ? 'Free'
+                          : formatNaira(shippingFee)
                       }
                     </span>
                   </div>
+                  {deliveryInfo && deliveryInfo.isDeliveryAvailable === false && (
+                    <div className="text-red-500 text-sm">
+                      {deliveryInfo.message}
+                    </div>
+                  )}
+                  <div className="border-t pt-2 mt-2">
+                    <div className="flex justify-between font-semibold">
+                      <span>Total</span>
+                      <span>{formatNaira(total)}</span>
+                    </div>
+                  </div>
                 </div>
                 
+                {/* Checkout error message */}
+                {checkoutError && (
+                  <div className="mb-4">
+                    <p className="text-red-500 text-sm">{checkoutError}</p>
+                  </div>
+                )}
+                
                 {/* Checkout button */}
-                <div className="mt-6">
-                  <Button
-                    variant="primary"
-                    fullWidth
-                    disabled={loading || cartItems.length === 0}
-                    onClick={handleCheckout}
-                  >
-                    Proceed to Checkout
-                  </Button>
-                </div>
+                <Button 
+                  variant="primary"
+                  className="w-full"
+                  onClick={handleCheckout}
+                  disabled={cartItems.length === 0}
+                >
+                  Proceed to Checkout
+                </Button>
                 
                 {/* Payment methods */}
                 <div className="mt-6">

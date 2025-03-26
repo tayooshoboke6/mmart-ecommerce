@@ -6,6 +6,7 @@ use App\Models\Address;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Facades\Log;
 
 class AddressController extends Controller
 {
@@ -75,19 +76,31 @@ class AddressController extends Controller
         if (auth()->id() != $userId) {
             return response()->json([
                 'success' => false,
-                'message' => 'Unauthorized to create address for another user'
+                'message' => 'Unauthorized access'
             ], 403);
         }
         
+        // Check if user has reached the maximum number of addresses (2)
+        $addressCount = Address::where('user_id', $userId)->count();
+        if ($addressCount >= 2) {
+            return response()->json([
+                'success' => false,
+                'message' => 'You can only have 2 addresses. Please delete an existing address before adding a new one.',
+                'max_reached' => true
+            ], 400);
+        }
+        
+        // Validate input
         $validator = Validator::make($request->all(), [
-            'name' => 'required|string|max:255',
+            'name' => 'required|string|max:100',
             'phone' => 'required|string|max:20',
             'street' => 'required|string|max:255',
             'city' => 'required|string|max:100',
             'state' => 'required|string|max:100',
-            'postalCode' => 'nullable|string|max:20',
+            'postalCode' => 'required|string|max:20',
             'country' => 'required|string|max:100',
-            'isDefault' => 'boolean'
+            'latitude' => 'nullable|numeric',
+            'longitude' => 'nullable|numeric'
         ]);
         
         if ($validator->fails()) {
@@ -118,7 +131,9 @@ class AddressController extends Controller
             'state' => $request->state,
             'postal_code' => $request->postalCode,
             'country' => $request->country,
-            'is_default' => $isDefault
+            'is_default' => $isDefault,
+            'latitude' => $request->latitude,
+            'longitude' => $request->longitude
         ]);
         
         $address->save();
@@ -160,7 +175,9 @@ class AddressController extends Controller
             'state' => 'string|max:100',
             'postalCode' => 'nullable|string|max:20',
             'country' => 'string|max:100',
-            'isDefault' => 'boolean'
+            'isDefault' => 'boolean',
+            'latitude' => 'nullable|numeric',
+            'longitude' => 'nullable|numeric'
         ]);
         
         if ($validator->fails()) {
@@ -188,6 +205,8 @@ class AddressController extends Controller
         if ($request->has('postalCode')) $address->postal_code = $request->postalCode;
         if ($request->has('country')) $address->country = $request->country;
         if ($request->has('isDefault')) $address->is_default = $request->isDefault;
+        if ($request->has('latitude')) $address->latitude = $request->latitude;
+        if ($request->has('longitude')) $address->longitude = $request->longitude;
         
         $address->save();
         
@@ -196,6 +215,73 @@ class AddressController extends Controller
             'message' => 'Address updated successfully',
             'data' => $address
         ]);
+    }
+    
+    /**
+     * Update address coordinates
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @param  int  $userId
+     * @param  int  $id
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function updateCoordinates(Request $request, $userId, $id)
+    {
+        // Validate request
+        $validator = Validator::make($request->all(), [
+            'latitude' => 'required|numeric',
+            'longitude' => 'required|numeric',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Invalid coordinates',
+                'errors' => $validator->errors()
+            ], 422);
+        }
+
+        try {
+            // Find the address
+            $address = Address::where('user_id', $userId)
+                ->where('id', $id)
+                ->first();
+
+            if (!$address) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'Address not found'
+                ], 404);
+            }
+
+            // Update coordinates
+            $address->latitude = $request->latitude;
+            $address->longitude = $request->longitude;
+            $address->save();
+
+            // Log the update
+            Log::info('Address coordinates updated', [
+                'address_id' => $id,
+                'latitude' => $request->latitude,
+                'longitude' => $request->longitude
+            ]);
+
+            return response()->json([
+                'status' => 'success',
+                'message' => 'Address coordinates updated successfully',
+                'data' => $address
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Error updating address coordinates', [
+                'address_id' => $id,
+                'error' => $e->getMessage()
+            ]);
+
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Failed to update address coordinates'
+            ], 500);
+        }
     }
     
     /**
