@@ -8,6 +8,7 @@ import AddressSelector from '../components/address/AddressSelector';
 import DeliveryMethodSelector from '../components/delivery/DeliveryMethodSelector';
 import AddressService from '../services/address.service';
 import CartService from '../services/cart.service';
+import CouponService from '../services/coupon.service';
 import axios from 'axios';
 
 const Cart = () => {
@@ -28,6 +29,7 @@ const Cart = () => {
   const [taxRate, setTaxRate] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
   const [checkoutError, setCheckoutError] = useState('');
+  const [appliedCoupon, setAppliedCoupon] = useState(null);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -93,19 +95,33 @@ const Cart = () => {
       return total + (itemPrice * item.quantity);
     }, 0);
   }, [cartItems]);
-  
+
   // Calculate tax amount
   const taxAmount = useMemo(() => {
     const calculatedTax = subtotal * (taxRate / 100);
     console.log('Tax calculation:', { subtotal, taxRate, calculatedTax });
     return calculatedTax;
   }, [subtotal, taxRate]);
-  
+
+  // Calculate discount amount
+  const discountAmount = useMemo(() => {
+    if (!appliedCoupon) return 0;
+    
+    if (appliedCoupon.type === 'percentage') {
+      const amount = (subtotal * appliedCoupon.value) / 100;
+      return appliedCoupon.max_discount_amount 
+        ? Math.min(amount, appliedCoupon.max_discount_amount)
+        : amount;
+    }
+    
+    return appliedCoupon.value;
+  }, [subtotal, appliedCoupon]);
+
   // Calculate total
   const total = useMemo(() => {
-    return subtotal + taxAmount + shippingFee;
-  }, [subtotal, taxAmount, shippingFee]);
-  
+    return subtotal + taxAmount + shippingFee - discountAmount;
+  }, [subtotal, taxAmount, shippingFee, discountAmount]);
+
   // Handle quantity change
   const handleQuantityChange = (itemId, newQuantity) => {
     if (newQuantity < 1) return;
@@ -115,23 +131,23 @@ const Cart = () => {
       updateCartItem(itemId, newQuantity);
     }
   };
-  
+
   // Handle remove item
   const handleRemoveItem = (itemId) => {
     if (window.confirm('Are you sure you want to remove this item from your cart?')) {
       removeCartItem(itemId);
     }
   };
-  
+
   // Handle clear cart
   const handleClearCart = () => {
     if (window.confirm('Are you sure you want to clear your cart?')) {
       clearCart();
     }
   };
-  
+
   // Handle apply coupon
-  const handleApplyCoupon = (e) => {
+  const handleApplyCoupon = async (e) => {
     e.preventDefault();
     
     if (!couponCode.trim()) {
@@ -143,18 +159,38 @@ const Cart = () => {
     setCouponError('');
     setCouponSuccess('');
     
-    // Simulate API call
-    setTimeout(() => {
-      // For demo purposes, only accept "WELCOME10" as a valid coupon
-      if (couponCode.toUpperCase() === 'WELCOME10') {
-        setCouponSuccess('Coupon applied successfully! You got 10% off.');
+    try {
+      const response = await CouponService.validateCoupon(
+        couponCode.trim(),
+        subtotal,
+        cartItems
+      );
+      
+      if (response.valid) {
+        setAppliedCoupon(response.coupon);
+        setCouponSuccess('Coupon applied successfully!');
+        setCouponCode('');
       } else {
-        setCouponError('Invalid or expired coupon code');
+        setCouponError(response.message || 'Invalid coupon code');
+        setAppliedCoupon(null);
       }
+    } catch (error) {
+      console.error('Error applying coupon:', error);
+      setCouponError(error.message || 'Failed to apply coupon');
+      setAppliedCoupon(null);
+    } finally {
       setCouponLoading(false);
-    }, 1000);
+    }
   };
-  
+
+  // Handle remove coupon
+  const handleRemoveCoupon = () => {
+    setAppliedCoupon(null);
+    setCouponSuccess('');
+    setCouponError('');
+    setCouponCode('');
+  };
+
   // Handle address selection
   const handleAddressSelect = async (addressId) => {
     setSelectedAddressId(addressId);
@@ -177,18 +213,18 @@ const Cart = () => {
       setSelectedAddress(null);
     }
   };
-  
+
   // Handle delivery method change
   const handleDeliveryMethodChange = (method) => {
     setDeliveryMethod(method);
   };
-  
+
   // Handle delivery fee calculation
   const handleDeliveryFeeCalculated = (fee, info) => {
     setShippingFee(fee);
     setDeliveryInfo(info);
   };
-  
+
   // Handle checkout
   const handleCheckout = () => {
     if (cartItems.length === 0) return;
@@ -220,7 +256,7 @@ const Cart = () => {
     
     navigate('/checkout');
   };
-  
+
   // Empty cart view
   if (!isLoading && cartItems.length === 0) {
     return (
@@ -245,7 +281,7 @@ const Cart = () => {
       </div>
     );
   }
-  
+
   return (
     <div className="bg-gray-50 py-8">
       <div className="container mx-auto px-4">
@@ -428,29 +464,35 @@ const Cart = () => {
               </div>
               
               <div className="p-6">
-                {/* Coupon code */}
+                {/* Coupon form */}
                 <form onSubmit={handleApplyCoupon} className="mb-6">
-                  <label htmlFor="coupon" className="block text-gray-700 font-medium mb-2">
-                    Apply Coupon Code
-                  </label>
-                  <div className="flex">
+                  <div className="flex items-center space-x-2">
                     <input
                       type="text"
-                      id="coupon"
                       value={couponCode}
                       onChange={(e) => setCouponCode(e.target.value)}
                       placeholder="Enter coupon code"
-                      className="flex-1 px-4 py-2 border border-gray-300 rounded-l-md focus:outline-none focus:ring-2 focus:ring-primary"
+                      className="flex-1 p-2 border rounded"
+                      disabled={couponLoading || !!appliedCoupon}
                     />
-                    <Button
-                      type="submit"
-                      variant="primary"
-                      loading={couponLoading}
-                      disabled={couponLoading}
-                      className="rounded-l-none"
-                    >
-                      Apply
-                    </Button>
+                    {appliedCoupon ? (
+                      <Button
+                        type="button"
+                        onClick={handleRemoveCoupon}
+                        variant="danger"
+                        className="whitespace-nowrap"
+                      >
+                        Remove
+                      </Button>
+                    ) : (
+                      <Button
+                        type="submit"
+                        disabled={couponLoading || !couponCode.trim()}
+                        className="whitespace-nowrap"
+                      >
+                        {couponLoading ? 'Applying...' : 'Apply'}
+                      </Button>
+                    )}
                   </div>
                   
                   {/* Coupon error */}
@@ -461,6 +503,14 @@ const Cart = () => {
                   {/* Coupon success */}
                   {couponSuccess && (
                     <p className="mt-2 text-green-600 text-sm">{couponSuccess}</p>
+                  )}
+                  
+                  {/* Applied coupon info */}
+                  {appliedCoupon && (
+                    <div className="mt-2 text-sm text-gray-600">
+                      <p>Applied: {appliedCoupon.code}</p>
+                      <p>{appliedCoupon.description}</p>
+                    </div>
                   )}
                 </form>
                 
@@ -494,12 +544,21 @@ const Cart = () => {
                     <span className="text-gray-600">Subtotal</span>
                     <span className="font-medium">{formatNaira(subtotal)}</span>
                   </div>
+                  
+                  {appliedCoupon && (
+                    <div className="flex justify-between text-green-600">
+                      <span>Discount</span>
+                      <span>-{formatNaira(discountAmount)}</span>
+                    </div>
+                  )}
+                  
                   <div className="flex justify-between">
                     <span className="text-gray-600">
                       VAT Tax{taxAmount > 0 ? ` (${taxRate}%)` : ''}
                     </span>
                     <span className="font-medium">{formatNaira(taxAmount)}</span>
                   </div>
+                  
                   <div className="flex justify-between">
                     <span className="text-gray-600">Delivery Fee</span>
                     <span>
@@ -511,16 +570,10 @@ const Cart = () => {
                       }
                     </span>
                   </div>
-                  {deliveryInfo && deliveryInfo.isDeliveryAvailable === false && (
-                    <div className="text-red-500 text-sm">
-                      {deliveryInfo.message}
-                    </div>
-                  )}
-                  <div className="border-t pt-2 mt-2">
-                    <div className="flex justify-between font-semibold">
-                      <span>Total</span>
-                      <span>{formatNaira(total)}</span>
-                    </div>
+                  
+                  <div className="flex justify-between font-semibold text-lg pt-4 border-t">
+                    <span>Total</span>
+                    <span>{formatNaira(total)}</span>
                   </div>
                 </div>
                 
