@@ -147,74 +147,23 @@ const Checkout = () => {
       // Handle different payment methods
       if (formData.paymentMethod === 'paystack') {
         try {
-          // Initialize Paystack payment with correct amount
-          const paymentData = {
-            email: formData.email,
-            amount: nairaToKobo(orderDetails.total),
-            callback_url: `${window.location.origin}/payment/callback`,
-            metadata: {
-              order_data: orderData
-            }
-          };
-          
-          const paymentResponse = await initializePaystackPayment(paymentData);
-          console.log('Paystack payment initialized:', paymentResponse);
-          
-          if (paymentResponse && paymentResponse.data && paymentResponse.data.authorization_url) {
-            const reference = paymentResponse.data.reference;
-            
-            // Store order data in localStorage for retrieval after payment
-            localStorage.setItem('pendingOrder', JSON.stringify({
-              orderData,
-              reference
-            }));
-            
-            // Redirect to Paystack payment page
-            window.location.href = paymentResponse.data.authorization_url;
-            return;
-          } else {
-            throw new Error('Invalid payment response');
-          }
-        } catch (error) {
-          console.error('Paystack payment error:', error);
-          setError('Payment initialization failed: ' + (error.message || 'Unknown error'));
-          setLoading(false);
-          return;
-        }
-      } else if (formData.paymentMethod === 'flutterwave') {
-        try {
-          // Initialize Flutterwave payment
+          // Generate payment reference first
           const reference = generatePaymentReference();
           
-          const paymentData = {
-            email: formData.email,
-            amount: orderDetails.total,
-            name: `${formData.firstName} ${formData.lastName}`,
-            phone: formData.phone,
-            redirect_url: `${window.location.origin}/payment/callback`,
-            meta: {
-              order_reference: reference,
-              customer_name: `${formData.firstName} ${formData.lastName}`,
-              shipping_address: `${orderDetails.selectedAddress.address}, ${orderDetails.selectedAddress.city}, ${orderDetails.selectedAddress.state}, ${orderDetails.selectedAddress.zip_code}`
-            }
-          };
-          
-          console.log('Initializing Flutterwave payment with data:', paymentData);
-          
-          // Create order data with the correct format for the backend
+          // First create the order in the database with pending status
           const orderWithItems = {
-            payment_method: formData.paymentMethod === 'paystack' || formData.paymentMethod === 'flutterwave' ? 'card' : 
-                            formData.paymentMethod === 'cashOnDelivery' ? 'cash_on_delivery' : formData.paymentMethod,
-            delivery_method: orderDetails.deliveryMethod === 'delivery' ? 'shipping' : orderDetails.deliveryMethod,
-            shipping_address: orderDetails.selectedAddress.street || orderDetails.selectedAddress.address || formData.address || 'No address provided',
-            shipping_city: orderDetails.selectedAddress.city || formData.city || 'No city provided',
-            shipping_state: orderDetails.selectedAddress.state || formData.state || 'No state provided',
-            shipping_zip: orderDetails.selectedAddress.postalCode || orderDetails.selectedAddress.zip_code || formData.zipCode || '00000',
-            shipping_phone: formData.phone || '0000000000',
-            shipping_fee: orderDetails.shippingFee || 0, 
-            customer_email: formData.email, // Add customer email from the checkout form
-            payment_reference: reference,
+            payment_method: 'card', // Required field
+            payment_gateway: 'paystack',
             payment_status: 'pending',
+            payment_reference: reference, // Include payment reference when creating the order
+            delivery_method: orderDetails.deliveryMethod === 'delivery' ? 'shipping' : 'pickup', // Must be 'shipping' or 'pickup'
+            shipping_address: orderDetails.selectedAddress?.address || formData.address || 'No address provided',
+            shipping_city: orderDetails.selectedAddress?.city || formData.city || 'No city provided',
+            shipping_state: orderDetails.selectedAddress?.state || formData.state || 'No state provided',
+            shipping_zip: orderDetails.selectedAddress?.zip_code || formData.zipCode || '00000',
+            shipping_phone: formData.phone || '0000000000',
+            shipping_fee: orderDetails.shippingFee || 0,
+            customer_email: formData.email,
             notes: '',
             coupon_code: orderDetails.appliedCoupon?.code || '',
             subtotal: orderDetails.subtotal || 0,
@@ -232,57 +181,135 @@ const Checkout = () => {
             }))
           };
           
-          // Debug the items data
-          console.log('Cart items being sent:', orderWithItems.items);
-          console.log('Final order data being sent:', orderWithItems);
+          console.log('Creating order in database before Paystack payment:', orderWithItems);
           
-          try {
-            console.log('Creating order in backend...');
-            const orderResponse = await api.post('/orders', orderWithItems);
-            console.log('Order creation response:', orderResponse.data);
-            
-            // Get the order ID and number from the response
-            const orderId = orderResponse.data.id || orderResponse.data.order?.id;
-            const orderNumber = orderResponse.data.order_number || orderResponse.data.order?.order_number || `ORD-${orderId}`;
-            
-            // Add order ID to payment metadata
-            paymentData.meta.order_id = orderId;
-            paymentData.meta.order_number = orderNumber;
-            
-            // Initialize Flutterwave payment
-            const paymentResponse = await initializeFlutterwavePayment(paymentData);
-            console.log('Flutterwave payment initialized:', paymentResponse);
-            
-            if (paymentResponse && paymentResponse.status === 'success' && paymentResponse.redirect_url) {
-              // Store order data in localStorage for retrieval after payment
-              localStorage.setItem('pendingOrder', JSON.stringify({
-                orderId,
-                orderNumber,
-                reference,
-                paymentMethod: 'flutterwave'
-              }));
-              
-              // Redirect to Flutterwave payment page
-              window.location.href = paymentResponse.redirect_url;
-              return;
-            } else {
-              throw new Error('Invalid payment response: ' + JSON.stringify(paymentResponse));
+          // Create the order first
+          const orderResponse = await api.post('/orders', orderWithItems);
+          console.log('Order created successfully:', orderResponse.data);
+          
+          // Get the order ID from the response
+          const orderId = orderResponse.data.order.id;
+          
+          // Initialize Paystack payment with correct amount and order ID
+          const paymentData = {
+            email: formData.email,
+            amount: nairaToKobo(orderDetails.total),
+            reference: reference, // Use the same reference we included in the order
+            callback_url: `${window.location.origin}/payment/callback`,
+            metadata: {
+              order_id: orderId,
+              customer_name: `${formData.firstName} ${formData.lastName}`,
+              customer_email: formData.email
             }
-          } catch (error) {
-            console.error('Flutterwave payment error:', error);
+          };
+          
+          const paymentResponse = await initializePaystackPayment(paymentData);
+          console.log('Paystack payment initialized:', paymentResponse);
+          
+          if (paymentResponse && paymentResponse.data && paymentResponse.data.authorization_url) {
+            const reference = paymentResponse.data.reference;
             
-            // Log detailed validation errors if available
-            if (error.response && error.response.data) {
-              console.error('Order creation validation errors:', error.response.data);
-              if (error.response.data.errors) {
-                Object.keys(error.response.data.errors).forEach(field => {
-                  console.error(`Error in field ${field}:`, error.response.data.errors[field]);
-                });
-              }
+            // Store order data in localStorage for retrieval after payment
+            localStorage.setItem('pendingOrder', JSON.stringify({
+              orderId,
+              reference
+            }));
+            
+            // Redirect to Paystack payment page
+            window.location.href = paymentResponse.data.authorization_url;
+            return;
+          } else {
+            throw new Error('Invalid payment response');
+          }
+        } catch (error) {
+          console.error('Paystack payment error:', error);
+          setError('Payment initialization failed: ' + (error.message || 'Unknown error'));
+          setLoading(false);
+          return;
+        }
+      } else if (formData.paymentMethod === 'flutterwave') {
+        try {
+          // Generate payment reference first
+          const reference = generatePaymentReference();
+          
+          // First create the order in the database with pending status
+          const orderWithItems = {
+            payment_method: 'card',
+            payment_gateway: 'flutterwave',
+            payment_status: 'pending',
+            payment_reference: reference, // Include payment reference when creating the order
+            delivery_method: orderDetails.deliveryMethod === 'delivery' ? 'shipping' : 'pickup', // Must be 'shipping' or 'pickup'
+            shipping_address: orderDetails.selectedAddress?.address || formData.address || 'No address provided',
+            shipping_city: orderDetails.selectedAddress?.city || formData.city || 'No city provided',
+            shipping_state: orderDetails.selectedAddress?.state || formData.state || 'No state provided',
+            shipping_zip: orderDetails.selectedAddress?.zip_code || formData.zipCode || '00000',
+            shipping_phone: formData.phone || '0000000000',
+            shipping_fee: orderDetails.shippingFee || 0,
+            customer_email: formData.email,
+            notes: '',
+            coupon_code: orderDetails.appliedCoupon?.code || '',
+            subtotal: orderDetails.subtotal || 0,
+            discount: orderDetails.discountAmount || 0,
+            tax: orderDetails.taxAmount || 0,
+            grand_total: orderDetails.total || 0,
+            items: orderDetails.cartItems.map(item => ({
+              product_id: item.product_id,
+              quantity: item.quantity,
+              unit_price: parseFloat(item.product.sale_price) || parseFloat(item.product.base_price) || 0,
+              product_name: item.product.name || 'Unknown Product',
+              measurement_unit: item.measurement?.unit || 'unit',
+              measurement_value: item.measurement?.value || '0',
+              product_measurement_id: item.measurement?.id || null
+            }))
+          };
+          
+          console.log('Creating order in database before Flutterwave payment:', orderWithItems);
+          
+          // Create the order first
+          const orderResponse = await api.post('/orders', orderWithItems);
+          console.log('Order created successfully:', orderResponse.data);
+          
+          // Get the order ID from the response
+          const orderId = orderResponse.data.order.id;
+          const orderNumber = orderResponse.data.order.order_number || `ORD-${orderId}`;
+          
+          // Initialize Flutterwave payment with correct amount and order ID
+          const paymentData = {
+            email: formData.email,
+            amount: orderDetails.total,
+            name: `${formData.firstName} ${formData.lastName}`,
+            phone: formData.phone,
+            tx_ref: reference, // Use the same reference we included in the order
+            redirect_url: `${window.location.origin}/payment/callback`,
+            meta: {
+              order_id: orderId,
+              order_number: orderNumber,
+              customer_name: `${formData.firstName} ${formData.lastName}`,
+              customer_email: formData.email,
+              shipping_address: orderDetails.selectedAddress?.address || formData.address || 'No address provided'
             }
+          };
+          
+          console.log('Initializing Flutterwave payment with data:', paymentData);
+          
+          // Initialize Flutterwave payment
+          const paymentResponse = await initializeFlutterwavePayment(paymentData);
+          console.log('Flutterwave payment initialized:', paymentResponse);
+          
+          if (paymentResponse && paymentResponse.status === 'success' && paymentResponse.redirect_url) {
+            // Store order data in localStorage for retrieval after payment
+            localStorage.setItem('pendingOrder', JSON.stringify({
+              orderId,
+              orderNumber,
+              reference,
+              paymentMethod: 'flutterwave'
+            }));
             
-            setError('Payment initialization failed: ' + (error.message || 'Unknown error'));
-            setLoading(false);
+            // Redirect to Flutterwave payment page
+            window.location.href = paymentResponse.redirect_url;
+            return;
+          } else {
+            throw new Error('Invalid payment response: ' + JSON.stringify(paymentResponse));
           }
         } catch (error) {
           console.error('Flutterwave payment error:', error);
@@ -332,11 +359,11 @@ const Checkout = () => {
           
           try {
             console.log('COD - Creating order in backend...');
-            const orderResponse = await api.post('/orders', orderWithItems);
-            console.log('COD - Order creation response:', orderResponse.data);
+            const codOrderResponse = await api.post('/orders', orderWithItems);
+            console.log('COD - Order creation response:', codOrderResponse.data);
             
             // Log email status for cash on delivery orders
-            if (formData.paymentMethod === 'cashOnDelivery' && orderResponse.data.email_sent) {
+            if (formData.paymentMethod === 'cashOnDelivery' && codOrderResponse.data.email_sent) {
               console.log(`✅ Order confirmation email sent successfully to customer email: ${formData.email}`);
             }
             
@@ -344,16 +371,16 @@ const Checkout = () => {
             clearCart();
             
             // Get the order ID from the response
-            const orderId = orderResponse.data.order.id;
+            const codOrderId = codOrderResponse.data.order.id;
             
             // Create a user-friendly order number format
-            const orderNumber = orderResponse.data.order.order_number || 
-                               `ORD-${orderId}`;
+            const codOrderNumber = codOrderResponse.data.order.order_number || 
+                               `ORD-${codOrderId}`;
             
             // Store the order ID in localStorage for the confirmation page to use
-            localStorage.setItem('last_order_id', orderId);
+            localStorage.setItem('last_order_id', codOrderId);
             
-            navigate(`/order-confirmation/${orderNumber}`);
+            navigate(`/order-confirmation/${codOrderNumber}`);
           } catch (error) {
             console.error('Order creation error:', error);
             if (error.response) {

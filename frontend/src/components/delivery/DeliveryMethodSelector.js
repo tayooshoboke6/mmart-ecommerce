@@ -12,12 +12,14 @@ const DeliveryMethodSelector = ({
   setSelectedAddress 
 }) => {
   const [loading, setLoading] = useState(false);
+  const [validating, setValidating] = useState(false);
   const [error, setError] = useState('');
   const [deliveryFee, setDeliveryFee] = useState(0);
   const [deliveryInfo, setDeliveryInfo] = useState(null);
   const [nearestStore, setNearestStore] = useState(null);
   const [isDeliveryAvailable, setIsDeliveryAvailable] = useState(false);
   const [isPickupAvailable, setIsPickupAvailable] = useState(false);
+  const [validationComplete, setValidationComplete] = useState(false);
 
   // Check delivery availability when address changes
   useEffect(() => {
@@ -27,8 +29,14 @@ const DeliveryMethodSelector = ({
         setIsDeliveryAvailable(false);
         setIsPickupAvailable(false);
         setNearestStore(null);
+        setValidationComplete(false);
         return;
       }
+
+      // Set validating state to true before starting validation
+      setValidating(true);
+      setValidationComplete(false);
+      setError('');
 
       try {
         const { latitude, longitude } = selectedAddress;
@@ -54,12 +62,16 @@ const DeliveryMethodSelector = ({
         setNearestStore(store);
         setIsDeliveryAvailable(isDeliveryAvailable);
         setIsPickupAvailable(isPickupAvailable);
+        setValidationComplete(true);
       } catch (error) {
         console.error('Error checking delivery availability:', error);
         setError('Failed to check delivery availability');
         setIsDeliveryAvailable(false);
         setIsPickupAvailable(false);
         setNearestStore(null);
+        setValidationComplete(true);
+      } finally {
+        setValidating(false);
       }
     };
 
@@ -133,7 +145,22 @@ const DeliveryMethodSelector = ({
     <div className="mt-4">
       <h3 className="text-lg font-medium text-gray-900">Delivery Method</h3>
       
-      {selectedAddress && !isDeliveryAvailable && !isPickupAvailable && (
+      {/* Show loading state while validating */}
+      {selectedAddress && validating && (
+        <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-md">
+          <div className="flex items-center">
+            <div className="mr-3">
+              <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-500"></div>
+            </div>
+            <p className="text-blue-700">
+              Checking delivery options for your address...
+            </p>
+          </div>
+        </div>
+      )}
+      
+      {/* Only show error message after validation is complete */}
+      {selectedAddress && validationComplete && !validating && !isDeliveryAvailable && !isPickupAvailable && (
         <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-md">
           <p className="text-red-700">
             Sorry, this address is outside our delivery and pickup zones. Please try a different address.
@@ -141,89 +168,97 @@ const DeliveryMethodSelector = ({
         </div>
       )}
 
-      {selectedAddress && (isDeliveryAvailable || isPickupAvailable) && (
+      {/* Only show delivery methods after validation is complete */}
+      {selectedAddress && validationComplete && !validating && (isDeliveryAvailable || isPickupAvailable) && (
         <div className="mt-4">
-          <div className="space-y-4">
-            <div className="flex items-center">
-              <input
-                type="radio"
-                id="delivery"
-                name="deliveryMethod"
-                value="delivery"
-                checked={selectedMethod === 'delivery'}
-                onChange={() => onMethodChange('delivery')}
-                disabled={!isDeliveryAvailable}
-                className="h-4 w-4 text-primary border-gray-300 focus:ring-primary"
-              />
-              <label htmlFor="delivery" className={`ml-3 block text-sm font-medium ${!isDeliveryAvailable ? 'text-gray-400' : 'text-gray-700'}`}>
-                Delivery
-                {deliveryFee > 0 && isDeliveryAvailable && (
-                  <span className="ml-2 text-sm text-gray-500">
-                    ({formatNaira(deliveryFee)})
-                  </span>
-                )}
+          <div className="grid grid-cols-2 gap-4">
+            {isPickupAvailable && (
+              <label 
+                htmlFor="pickup" 
+                className={`border rounded-lg p-4 flex flex-col items-center cursor-pointer transition-all h-32 ${
+                  selectedMethod === 'pickup' 
+                    ? 'border-primary bg-primary-50 shadow-sm' 
+                    : 'border-gray-300 hover:border-primary-light'
+                }`}
+              >
+                <div className="flex items-center justify-center w-full h-full">
+                  <input
+                    type="radio"
+                    id="pickup"
+                    name="deliveryMethod"
+                    value="pickup"
+                    checked={selectedMethod === 'pickup'}
+                    onChange={() => onMethodChange('pickup')}
+                    className="sr-only" // Hide the actual radio button
+                  />
+                  <div className="text-center">
+                    <div className="font-medium text-lg">Pickup</div>
+                    <div className="text-sm text-gray-500">Today</div>
+                    <div className="mt-1 text-sm text-primary">Free</div>
+                  </div>
+                </div>
               </label>
-            </div>
-
-            <div className="flex items-center">
-              <input
-                type="radio"
-                id="pickup"
-                name="deliveryMethod"
-                value="pickup"
-                checked={selectedMethod === 'pickup'}
-                onChange={() => onMethodChange('pickup')}
-                disabled={!isPickupAvailable}
-                className="h-4 w-4 text-primary border-gray-300 focus:ring-primary"
-              />
-              <label htmlFor="pickup" className={`ml-3 block text-sm font-medium ${!isPickupAvailable ? 'text-gray-400' : 'text-gray-700'}`}>
-                Pickup (Free)
+            )}
+            
+            {isDeliveryAvailable && (
+              <label 
+                htmlFor="delivery" 
+                className={`border rounded-lg p-4 flex flex-col items-center cursor-pointer transition-all h-32 ${
+                  selectedMethod === 'delivery' 
+                    ? 'border-primary bg-primary-50 shadow-sm' 
+                    : 'border-gray-300 hover:border-primary-light'
+                }`}
+              >
+                <div className="flex items-center justify-center w-full h-full">
+                  <input
+                    type="radio"
+                    id="delivery"
+                    name="deliveryMethod"
+                    value="delivery"
+                    checked={selectedMethod === 'delivery'}
+                    onChange={() => onMethodChange('delivery')}
+                    className="sr-only" // Hide the actual radio button
+                  />
+                  <div className="text-center">
+                    <div className="font-medium text-lg">Delivery</div>
+                    <div className="text-sm text-gray-500">Today</div>
+                    {deliveryInfo && (
+                      <div className="mt-1 text-sm text-primary">
+                        {formatNaira(deliveryFee)}
+                      </div>
+                    )}
+                  </div>
+                </div>
               </label>
-            </div>
+            )}
           </div>
-
-          {selectedMethod === 'delivery' && (
-            <div className="mt-4 pl-4">
-              {loading && (
-                <div className="flex items-center">
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary mr-2"></div>
-                  <span className="text-sm">Calculating delivery fee...</span>
-                </div>
-              )}
-              
-              {error && (
-                <p className="text-red-500 text-sm">{error}</p>
-              )}
-              
-              {deliveryInfo && isDeliveryAvailable && (
-                <div className="text-sm">
-                  <p className="text-green-600">{deliveryInfo.message}</p>
-                  {deliveryInfo.estimatedTime > 0 && (
-                    <p className="text-green-600">
-                      Estimated delivery time: Under {deliveryInfo.estimatedTime} minutes
-                    </p>
-                  )}
-                </div>
-              )}
+          
+          {selectedMethod === 'delivery' && deliveryInfo && (
+            <div className="mt-2 text-sm text-green-600 text-center">
+              Estimated delivery time: {deliveryInfo.estimated_time || deliveryInfo.estimatedTime} minutes
             </div>
           )}
-
-          {selectedMethod === 'pickup' && nearestStore && (
-            <div className="mt-4 pl-4">
-              <div className="text-sm text-gray-700">
-                <p className="font-medium">{nearestStore.name}</p>
-                <p>{nearestStore.formatted_address}</p>
-                {nearestStore.phone && <p>Phone: {nearestStore.phone}</p>}
-              </div>
+          
+          {loading && (
+            <div className="mt-2">
+              <div className="animate-pulse h-4 w-24 bg-gray-200 rounded"></div>
+            </div>
+          )}
+          
+          {error && (
+            <div className="mt-2 text-sm text-red-600">
+              {error}
             </div>
           )}
         </div>
       )}
-
+      
       {!selectedAddress && (
-        <p className="mt-4 text-sm text-gray-500">
-          Please select a delivery address to see available options.
-        </p>
+        <div className="mt-4 p-4 bg-gray-50 border border-gray-200 rounded-md">
+          <p className="text-gray-700">
+            Please select a delivery address to see available delivery methods.
+          </p>
+        </div>
       )}
     </div>
   );

@@ -47,6 +47,11 @@ Route::post('/auth/apple', [SocialAuthController::class, 'appleAuth']);
 Route::post('/forgot-password', [AuthController::class, 'forgotPassword']);
 Route::post('/reset-password', [AuthController::class, 'resetPassword']);
 
+// Payment routes
+Route::post('/payments/paystack/initialize', [\App\Http\Controllers\PaystackController::class, 'initializePayment']);
+Route::post('/payments/paystack/verify', [\App\Http\Controllers\PaystackController::class, 'verifyPayment']);
+Route::post('/payments/paystack/webhook', [\App\Http\Controllers\PaystackController::class, 'handleWebhook']);
+
 // Test endpoint for social auth
 Route::post('/auth/google/test', [SocialAuthController::class, 'testGoogleAuth']);
 

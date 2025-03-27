@@ -113,7 +113,13 @@ export const CartProvider = ({ children }) => {
     setError(null);
     try {
       const response = await CartService.updateCartItem(itemId, quantity);
-      await fetchCartItems(); // Refresh cart after update
+      
+      // Update cart items locally instead of fetching the entire cart again
+      setCartItems(prevItems => 
+        prevItems.map(item => 
+          item.id === itemId ? { ...item, quantity } : item
+        )
+      );
       
       // Show success notification for update
       showSuccess('Cart updated successfully!');
@@ -164,6 +170,13 @@ export const CartProvider = ({ children }) => {
     try {
       const response = await CartService.clearCart();
       setCartItems([]);
+      
+      // Clear coupon-related localStorage items
+      localStorage.removeItem('appliedCoupon');
+      localStorage.removeItem('discountAmount');
+      localStorage.removeItem('shippingFee');
+      localStorage.removeItem('deliveryInfo');
+      
       return response;
     } catch (err) {
       setError(err);
