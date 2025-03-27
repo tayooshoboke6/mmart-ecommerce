@@ -109,20 +109,21 @@ export const CartProvider = ({ children }) => {
 
   // Update cart item quantity
   const updateCartItem = async (itemId, quantity) => {
-    setLoading(true);
     setError(null);
+    
     try {
+      // Make the API call in the background without setting loading state
       const response = await CartService.updateCartItem(itemId, quantity);
       
-      // Update cart items locally instead of fetching the entire cart again
+      // Update cart items locally without showing loading state
       setCartItems(prevItems => 
         prevItems.map(item => 
           item.id === itemId ? { ...item, quantity } : item
         )
       );
       
-      // Show success notification for update
-      showSuccess('Cart updated successfully!');
+      // Show success notification for update (optional - can be removed for even less visual disruption)
+      showSuccess('Cart updated');
       
       return response;
     } catch (err) {
@@ -133,8 +134,6 @@ export const CartProvider = ({ children }) => {
       showError('Failed to update cart. Please try again.');
       
       throw err;
-    } finally {
-      setLoading(false);
     }
   };
 

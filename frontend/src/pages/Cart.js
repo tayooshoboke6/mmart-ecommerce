@@ -45,6 +45,17 @@ const Cart = () => {
   const [deliveryFee, setDeliveryFee] = useState(0);
   const [deliveryError, setDeliveryError] = useState('');
 
+  // State for tracking items being updated
+  const [updatingItems, setUpdatingItems] = useState({});
+  
+  // Local state for cart items to enable instant updates
+  const [localCartItems, setLocalCartItems] = useState([]);
+  
+  // Sync local cart items with context cart items
+  useEffect(() => {
+    setLocalCartItems(cartItems);
+  }, [cartItems]);
+
   useEffect(() => {
     const fetchData = async () => {
       if (!isAuthenticated || !user) return;
@@ -155,14 +166,20 @@ const Cart = () => {
     localStorage.removeItem('deliveryInfo');
   }, []);
 
-  // Calculate subtotal
-  const subtotal = useMemo(() => {
-    return cartItems.reduce((total, item) => {
-      const product = item.product || {};
-      const itemPrice = parseFloat(product.sale_price) || parseFloat(product.base_price) || 0;
-      return total + (itemPrice * item.quantity);
-    }, 0);
-  }, [cartItems]);
+  // Calculate totals based on local cart items
+  const { subtotal, itemCount } = useMemo(() => {
+    let total = 0;
+    let count = 0;
+    
+    localCartItems.forEach(item => {
+      const price = item.product ? 
+        (parseFloat(item.product.sale_price) || parseFloat(item.product.base_price)) : 0;
+      total += price * item.quantity;
+      count += item.quantity;
+    });
+    
+    return { subtotal: total, itemCount: count };
+  }, [localCartItems]);
 
   // Calculate tax amount
   const taxAmount = useMemo(() => {
@@ -176,13 +193,30 @@ const Cart = () => {
     return subtotal + taxAmount + shippingFee - discountAmount;
   }, [subtotal, taxAmount, shippingFee, discountAmount]);
 
-  // Handle quantity change
+  // Handle quantity change with instant updates
   const handleQuantityChange = (itemId, newQuantity) => {
     if (newQuantity < 1) return;
     
-    const item = cartItems.find(item => item.id === itemId);
+    const item = localCartItems.find(item => item.id === itemId);
     if (item && newQuantity <= (item.product ? item.product.stock_quantity : item.stock_quantity || 10)) {
-      updateCartItem(itemId, newQuantity);
+      // Update local state instantly
+      setLocalCartItems(prevItems => 
+        prevItems.map(cartItem => 
+          cartItem.id === itemId ? { ...cartItem, quantity: newQuantity } : cartItem
+        )
+      );
+      
+      // Debounce the API call to prevent rapid successive calls
+      const timerId = setTimeout(() => {
+        updateCartItem(itemId, newQuantity).catch(error => {
+          console.error('Failed to update quantity:', error);
+          // If API call fails, revert to original cart items from context
+          setLocalCartItems(cartItems);
+        });
+      }, 300); // 300ms debounce
+      
+      // Clean up timer on component unmount
+      return () => clearTimeout(timerId);
     }
   };
 
@@ -223,7 +257,7 @@ const Cart = () => {
       const response = await CouponService.validateCoupon(
         couponCode.trim(),
         subtotal,
-        cartItems
+        localCartItems
       );
       
       if (response.valid) {
@@ -294,7 +328,7 @@ const Cart = () => {
 
   // Handle checkout
   const handleCheckout = () => {
-    if (cartItems.length === 0) return;
+    if (localCartItems.length === 0) return;
     
     // If user is authenticated and delivery is selected, make sure they have selected an address
     if (isAuthenticated && deliveryMethod === 'delivery' && !selectedAddressId) {
@@ -324,7 +358,7 @@ const Cart = () => {
       taxAmount,
       taxRate,
       total,
-      cartItems: cartItems.map(item => ({
+      cartItems: localCartItems.map(item => ({
         ...item,
         product: {
           id: item.product.id,
@@ -346,10 +380,10 @@ const Cart = () => {
           <h1 className="text-2xl font-bold text-gray-900">Shopping Cart</h1>
         </div>
 
-        {loading ? (
+        {loading && !localCartItems.length && cartItems.length === 0 ? (
           <div className="flex justify-center items-center py-20">
             <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
-            <p className="ml-3 text-lg text-gray-600">Updating cart...</p>
+            <p className="ml-3 text-lg text-gray-600">Loading your cart...</p>
           </div>
         ) : error ? (
           <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
@@ -361,7 +395,7 @@ const Cart = () => {
               Try again
             </button>
           </div>
-        ) : cartItems.length === 0 ? (
+        ) : localCartItems.length === 0 ? (
           <div className="bg-white rounded-lg shadow-sm p-6 text-center">
             <p className="text-lg text-gray-600 mb-4">Your cart is empty</p>
             <Link
@@ -376,7 +410,7 @@ const Cart = () => {
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
               {/* Cart Items Section */}
               <div className="lg:col-span-2 space-y-4">
-                {cartItems.map((item) => (
+                {localCartItems.map((item) => (
                   <div
                     key={item.id}
                     className="bg-white rounded-lg shadow-sm p-6 flex items-center space-x-4"
@@ -398,14 +432,16 @@ const Cart = () => {
                         <div className="flex items-center border rounded-md">
                           <button
                             onClick={() => handleQuantityChange(item.id, Math.max(1, item.quantity - 1))}
-                            className="px-3 py-1 text-gray-600 hover:text-gray-800"
+                            className="px-3 py-1 text-gray-600 hover:text-gray-800 transition-colors"
                           >
                             -
                           </button>
-                          <span className="px-3 py-1 border-x">{item.quantity}</span>
+                          <span className="px-3 py-1 border-x">
+                            {item.quantity}
+                          </span>
                           <button
                             onClick={() => handleQuantityChange(item.id, item.quantity + 1)}
-                            className="px-3 py-1 text-gray-600 hover:text-gray-800"
+                            className="px-3 py-1 text-gray-600 hover:text-gray-800 transition-colors"
                             disabled={item.quantity >= (item.product ? item.product.stock_quantity : item.stock_quantity || 10)}
                           >
                             +

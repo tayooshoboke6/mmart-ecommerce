@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import DeliveryService from '../../services/delivery.service';
 import StoreService from '../../services/store.service';
 import { formatNaira } from '../../utils/formatters';
@@ -20,64 +20,87 @@ const DeliveryMethodSelector = ({
   const [isDeliveryAvailable, setIsDeliveryAvailable] = useState(false);
   const [isPickupAvailable, setIsPickupAvailable] = useState(false);
   const [validationComplete, setValidationComplete] = useState(false);
-
-  // Check delivery availability when address changes
-  useEffect(() => {
-    const checkDeliveryAvailability = async () => {
-      if (!selectedAddress) {
-        console.log('No address selected, resetting delivery options');
-        setIsDeliveryAvailable(false);
-        setIsPickupAvailable(false);
-        setNearestStore(null);
-        setValidationComplete(false);
-        return;
-      }
-
-      // Set validating state to true before starting validation
-      setValidating(true);
+  
+  // Debounced validation function
+  const checkDeliveryAvailability = useCallback(async (address) => {
+    if (!address) {
+      console.log('No address selected, resetting delivery options');
+      setIsDeliveryAvailable(false);
+      setIsPickupAvailable(false);
+      setNearestStore(null);
       setValidationComplete(false);
-      setError('');
+      return;
+    }
 
-      try {
-        const { latitude, longitude } = selectedAddress;
-        console.log('Checking delivery for address:', {
-          address: selectedAddress.street,
-          latitude,
-          longitude
-        });
+    // Set validating state to true before starting validation
+    setValidating(true);
+    setValidationComplete(false);
+    setError('');
 
-        const { store, isDeliveryAvailable, isPickupAvailable, distance } = await StoreService.findNearestStore({ 
-          latitude, 
-          longitude 
-        });
+    try {
+      const { latitude, longitude } = address;
+      console.log('Checking delivery for address:', {
+        address: address.street,
+        latitude,
+        longitude
+      });
 
-        console.log('Store availability check result:', {
-          storeName: store?.name,
-          isDeliveryAvailable,
-          isPickupAvailable,
-          distance,
-          store
-        });
+      const { store, isDeliveryAvailable, isPickupAvailable, distance } = await StoreService.findNearestStore({ 
+        latitude, 
+        longitude 
+      });
 
-        setNearestStore(store);
-        setIsDeliveryAvailable(isDeliveryAvailable);
-        setIsPickupAvailable(isPickupAvailable);
-        setValidationComplete(true);
-      } catch (error) {
-        console.error('Error checking delivery availability:', error);
-        setError('Failed to check delivery availability');
-        setIsDeliveryAvailable(false);
-        setIsPickupAvailable(false);
-        setNearestStore(null);
-        setValidationComplete(true);
-      } finally {
-        setValidating(false);
+      console.log('Store availability check result:', {
+        storeName: store?.name,
+        isDeliveryAvailable,
+        isPickupAvailable,
+        distance,
+        store
+      });
+
+      setNearestStore(store);
+      setIsDeliveryAvailable(isDeliveryAvailable);
+      setIsPickupAvailable(isPickupAvailable);
+      setValidationComplete(true);
+    } catch (error) {
+      console.error('Error checking delivery availability:', error);
+      setError('Failed to check delivery availability');
+      setIsDeliveryAvailable(false);
+      setIsPickupAvailable(false);
+      setNearestStore(null);
+      setValidationComplete(true);
+    } finally {
+      setValidating(false);
+    }
+  }, []);
+
+  // Use debounce for address validation
+  useEffect(() => {
+    let timeoutId = null;
+    
+    if (selectedAddress) {
+      // Show validating state immediately for better UX
+      setValidating(true);
+      
+      // Set a timeout to actually perform the validation
+      timeoutId = setTimeout(() => {
+        checkDeliveryAvailability(selectedAddress);
+      }, 500); // 500ms debounce
+    } else {
+      // Reset states if no address
+      setIsDeliveryAvailable(false);
+      setIsPickupAvailable(false);
+      setNearestStore(null);
+      setValidationComplete(false);
+    }
+    
+    // Cleanup function to cancel the timeout if component unmounts or address changes again
+    return () => {
+      if (timeoutId) {
+        clearTimeout(timeoutId);
       }
     };
-
-    console.log('Address changed, checking delivery availability');
-    checkDeliveryAvailability();
-  }, [selectedAddress]);
+  }, [selectedAddress, checkDeliveryAvailability]);
 
   // Calculate delivery fee when method or address changes
   useEffect(() => {
