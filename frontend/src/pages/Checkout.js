@@ -132,6 +132,7 @@ const Checkout = () => {
         shipping_state: orderDetails.selectedAddress?.state,
         shipping_zip: orderDetails.selectedAddress?.zip_code,
         shipping_phone: formData.phone,
+        shipping_fee: orderDetails.shippingFee || 0,
         notes: '',
         coupon_code: orderDetails.appliedCoupon?.code,
         subtotal: orderDetails.subtotal,
