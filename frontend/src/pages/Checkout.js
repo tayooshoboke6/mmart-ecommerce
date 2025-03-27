@@ -16,26 +16,15 @@ const Checkout = () => {
   const { user } = useAuth();
   const { cartItems, clearCart } = useCart();
   
-  // Calculate cart totals (same logic as in Cart.js)
-  const subtotal = cartItems.reduce((total, item) => {
-    const product = item.product || {};
-    const itemPrice = parseFloat(product.sale_price) || parseFloat(product.base_price) || 0;
-    return total + (itemPrice * item.quantity);
-  }, 0);
+  // State for order details from cart
+  const [orderDetails, setOrderDetails] = useState(null);
   
-  const shippingFee = subtotal > 10000 ? 0 : 1500; // Free shipping for orders over ₦10,000
-  const tax = subtotal * 0.075; // 7.5% VAT
-  const total = subtotal + shippingFee + tax;
-  
+  // Form state
   const [formData, setFormData] = useState({
     firstName: user?.firstName || '',
     lastName: user?.lastName || '',
     email: user?.email || '',
     phone: user?.phone || '',
-    address: '',
-    city: '',
-    state: '',
-    zipCode: '',
     paymentMethod: 'card',
   });
   
@@ -43,7 +32,30 @@ const Checkout = () => {
   const [error, setError] = useState('');
   
   useEffect(() => {
-    // Redirect to cart if cart is empty
+    // Get saved order details
+    const savedDetails = localStorage.getItem('orderDetails');
+    if (savedDetails) {
+      const details = JSON.parse(savedDetails);
+      setOrderDetails(details);
+      
+      // Pre-fill address fields if delivery address exists
+      if (details.selectedAddress) {
+        setFormData(prev => ({
+          ...prev,
+          address: details.selectedAddress.address || '',
+          city: details.selectedAddress.city || '',
+          state: details.selectedAddress.state || '',
+          zipCode: details.selectedAddress.zip_code || '',
+        }));
+      }
+    } else {
+      // Redirect back to cart if no details found
+      navigate('/cart');
+    }
+  }, [navigate]);
+  
+  // Redirect to cart if no items
+  useEffect(() => {
     if (cartItems.length === 0) {
       navigate('/cart');
     }
@@ -62,22 +74,31 @@ const Checkout = () => {
     setLoading(true);
     setError('');
     
+    if (!orderDetails) {
+      setError('Order details not found. Please return to cart.');
+      setLoading(false);
+      return;
+    }
+    
     try {
-      console.log('Form data:', formData);
-      console.log('Cart items:', cartItems);
-      console.log('Order totals:', { subtotal, shippingFee, tax, total });
-      
-      // Create the order data according to backend expectations
+      // Create the order data using saved details
       const orderData = {
         payment_method: formData.paymentMethod === 'paystack' || formData.paymentMethod === 'flutterwave' ? 'card' : 
-                        formData.paymentMethod === 'cashOnDelivery' ? 'cash_on_delivery' : formData.paymentMethod,
-        delivery_method: 'shipping', // Could be 'pickup' if you implement that option
-        shipping_address: formData.address,
-        shipping_city: formData.city,
-        shipping_state: formData.state,
-        shipping_zip: formData.zipCode,
+                       formData.paymentMethod === 'cashOnDelivery' ? 'cash_on_delivery' : formData.paymentMethod,
+        delivery_method: orderDetails.deliveryMethod,
+        shipping_address: orderDetails.selectedAddress?.address,
+        shipping_city: orderDetails.selectedAddress?.city,
+        shipping_state: orderDetails.selectedAddress?.state,
+        shipping_zip: orderDetails.selectedAddress?.zip_code,
         shipping_phone: formData.phone,
-        notes: '',  // Optional delivery notes
+        notes: '',
+        coupon_code: orderDetails.appliedCoupon?.code,
+        subtotal: orderDetails.subtotal,
+        discount: orderDetails.discountAmount,
+        shipping_fee: orderDetails.shippingFee,
+        tax: orderDetails.taxAmount,
+        total: orderDetails.total,
+        items: orderDetails.cartItems
       };
 
       console.log('Order data being sent to API:', orderData);
@@ -85,11 +106,14 @@ const Checkout = () => {
       // Handle different payment methods
       if (formData.paymentMethod === 'paystack') {
         try {
-          // Initialize Paystack payment
+          // Initialize Paystack payment with correct amount
           const paymentData = {
             email: formData.email,
-            amount: total * 100, // Convert to kobo (Naira's smallest unit)
-            callback_url: `${window.location.origin}/payment/callback`
+            amount: nairaToKobo(orderDetails.total),
+            callback_url: `${window.location.origin}/payment/callback`,
+            metadata: {
+              order_data: orderData
+            }
           };
           
           const paymentResponse = await initializePaystackPayment(paymentData);
@@ -123,14 +147,14 @@ const Checkout = () => {
           
           const paymentData = {
             email: formData.email,
-            amount: total,
+            amount: orderDetails.total,
             name: `${formData.firstName} ${formData.lastName}`,
             phone: formData.phone,
             redirect_url: `${window.location.origin}/payment/callback`,
             meta: {
               order_reference: reference,
               customer_name: `${formData.firstName} ${formData.lastName}`,
-              shipping_address: `${formData.address}, ${formData.city}, ${formData.state}, ${formData.zipCode}`
+              shipping_address: `${orderDetails.selectedAddress.address}, ${orderDetails.selectedAddress.city}, ${orderDetails.selectedAddress.state}, ${orderDetails.selectedAddress.zip_code}`
             }
           };
           
@@ -140,17 +164,17 @@ const Checkout = () => {
           const orderWithItems = {
             payment_method: formData.paymentMethod === 'paystack' || formData.paymentMethod === 'flutterwave' ? 'card' : 
                             formData.paymentMethod === 'cashOnDelivery' ? 'cash_on_delivery' : formData.paymentMethod,
-            delivery_method: 'shipping',
-            shipping_address: formData.address,
-            shipping_city: formData.city,
-            shipping_state: formData.state,
-            shipping_zip: formData.zipCode,
+            delivery_method: orderDetails.deliveryMethod,
+            shipping_address: orderDetails.selectedAddress.address,
+            shipping_city: orderDetails.selectedAddress.city,
+            shipping_state: orderDetails.selectedAddress.state,
+            shipping_zip: orderDetails.selectedAddress.zip_code,
             shipping_phone: formData.phone,
             customer_email: formData.email, // Add customer email from the checkout form
             payment_reference: reference,
             payment_status: 'pending',
             notes: '',
-            items: cartItems.map(item => ({
+            items: orderDetails.cartItems.map(item => ({
               product_id: item.product_id,
               quantity: item.quantity,
               unit_price: parseFloat(item.product.sale_price) || parseFloat(item.product.base_price) || 0,
@@ -209,17 +233,17 @@ const Checkout = () => {
           const orderWithItems = {
             payment_method: formData.paymentMethod === 'paystack' || formData.paymentMethod === 'flutterwave' ? 'card' : 
                             formData.paymentMethod === 'cashOnDelivery' ? 'cash_on_delivery' : formData.paymentMethod,
-            delivery_method: 'shipping',
-            shipping_address: formData.address,
-            shipping_city: formData.city,
-            shipping_state: formData.state,
-            shipping_zip: formData.zipCode,
+            delivery_method: orderDetails.deliveryMethod,
+            shipping_address: orderDetails.selectedAddress.address,
+            shipping_city: orderDetails.selectedAddress.city,
+            shipping_state: orderDetails.selectedAddress.state,
+            shipping_zip: orderDetails.selectedAddress.zip_code,
             shipping_phone: formData.phone,
             customer_email: formData.email, // Add customer email from the checkout form
             payment_reference: '',
             payment_status: 'pending',
             notes: '',
-            items: cartItems.map(item => ({
+            items: orderDetails.cartItems.map(item => ({
               product_id: item.product_id,
               quantity: item.quantity,
               unit_price: parseFloat(item.product.sale_price) || parseFloat(item.product.base_price) || 0,
@@ -520,7 +544,7 @@ const Checkout = () => {
           <h2 className="text-xl font-semibold mb-4">Order Summary</h2>
           
           <div className="border-b pb-4 mb-4">
-            {cartItems.map((item) => (
+            {orderDetails?.cartItems.map((item) => (
               <div key={item.id} className="flex justify-between items-center mb-2">
                 <div className="flex items-center">
                   <span className="font-medium">{item.quantity} x</span>
@@ -534,21 +558,21 @@ const Checkout = () => {
           <div className="border-b pb-4 mb-4">
             <div className="flex justify-between mb-2">
               <span>Subtotal</span>
-              <span>{formatNaira(subtotal)}</span>
+              <span>{formatNaira(orderDetails?.subtotal || 0)}</span>
             </div>
             <div className="flex justify-between mb-2">
               <span>Shipping</span>
-              <span>{formatNaira(shippingFee)}</span>
+              <span>{formatNaira(orderDetails?.shippingFee || 0)}</span>
             </div>
             <div className="flex justify-between">
               <span>Tax (7.5%)</span>
-              <span>{formatNaira(tax)}</span>
+              <span>{formatNaira(orderDetails?.taxAmount || 0)}</span>
             </div>
           </div>
           
           <div className="flex justify-between font-bold text-lg">
             <span>Total</span>
-            <span>{formatNaira(total)}</span>
+            <span>{formatNaira(orderDetails?.total || 0)}</span>
           </div>
         </div>
       </div>

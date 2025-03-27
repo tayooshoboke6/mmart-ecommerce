@@ -10,11 +10,16 @@ class AddressService {
     try {
       const response = await api.get(`/users/${userId}/addresses`);
       return {
+        success: true,
         addresses: response.data.data || []
       };
     } catch (error) {
       console.error('Error fetching user addresses:', error);
-      throw error;
+      return {
+        success: false,
+        addresses: [],
+        error: error.response?.data?.message || 'Failed to fetch addresses'
+      };
     }
   }
 
@@ -26,22 +31,41 @@ class AddressService {
    */
   async addAddress(userId, addressData) {
     try {
+      console.log('=== Adding Address ===');
+      console.log('Request URL:', `${api.defaults.baseURL}/users/${userId}/addresses`);
+      console.log('Request Data:', JSON.stringify(addressData, null, 2));
+      
       const response = await api.post(`/users/${userId}/addresses`, addressData);
+      
+      console.log('=== Response ===');
+      console.log('Status:', response.status);
+      console.log('Response Data:', JSON.stringify(response.data, null, 2));
+      
       return {
         success: true,
         address: response.data.data
       };
     } catch (error) {
-      console.error('Error adding address:', error);
+      console.error('=== Error Adding Address ===');
+      console.error('Error:', error.message);
+      if (error.response) {
+        console.error('Response Status:', error.response.status);
+        console.error('Response Data:', JSON.stringify(error.response.data, null, 2));
+      }
+      
       // Check if this is the max addresses reached error
-      if (error.response && error.response.data && error.response.data.max_reached) {
+      if (error.response?.data?.max_reached) {
         return {
           success: false,
           maxReached: true,
           message: error.response.data.message
         };
       }
-      throw error;
+
+      return {
+        success: false,
+        message: error.response?.data?.message || error.response?.data?.errors?.join(', ') || 'Failed to add address'
+      };
     }
   }
 

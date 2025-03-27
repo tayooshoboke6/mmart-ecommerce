@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import DeliveryService from '../../services/delivery.service';
+import StoreService from '../../services/store.service';
 import { formatNaira } from '../../utils/formatters';
 
 const DeliveryMethodSelector = ({ 
@@ -10,316 +11,220 @@ const DeliveryMethodSelector = ({
   onMethodChange, 
   setSelectedAddress 
 }) => {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
   const [deliveryFee, setDeliveryFee] = useState(0);
   const [deliveryInfo, setDeliveryInfo] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
-  const [pickupLocations, setPickupLocations] = useState([]);
-  const [selectedPickupLocation, setSelectedPickupLocation] = useState(null);
+  const [nearestStore, setNearestStore] = useState(null);
+  const [isDeliveryAvailable, setIsDeliveryAvailable] = useState(false);
+  const [isPickupAvailable, setIsPickupAvailable] = useState(false);
 
-  // Fetch pickup locations on component mount
+  // Check delivery availability when address changes
   useEffect(() => {
-    const fetchPickupLocations = async () => {
+    const checkDeliveryAvailability = async () => {
+      if (!selectedAddress) {
+        console.log('No address selected, resetting delivery options');
+        setIsDeliveryAvailable(false);
+        setIsPickupAvailable(false);
+        setNearestStore(null);
+        return;
+      }
+
       try {
-        const response = await DeliveryService.getPickupLocations();
-        if (response.success && response.locations && response.locations.length > 0) {
-          setPickupLocations(response.locations);
-          // Set first pickup location as default if available
-          setSelectedPickupLocation(response.locations[0].id);
-        } else {
-          console.log('No pickup locations available or empty response:', response);
-          setPickupLocations([]);
-        }
+        const { latitude, longitude } = selectedAddress;
+        console.log('Checking delivery for address:', {
+          address: selectedAddress.street,
+          latitude,
+          longitude
+        });
+
+        const { store, isDeliveryAvailable, isPickupAvailable, distance } = await StoreService.findNearestStore({ 
+          latitude, 
+          longitude 
+        });
+
+        console.log('Store availability check result:', {
+          storeName: store?.name,
+          isDeliveryAvailable,
+          isPickupAvailable,
+          distance,
+          store
+        });
+
+        setNearestStore(store);
+        setIsDeliveryAvailable(isDeliveryAvailable);
+        setIsPickupAvailable(isPickupAvailable);
       } catch (error) {
-        console.error('Error fetching pickup locations:', error);
-        setPickupLocations([]);
+        console.error('Error checking delivery availability:', error);
+        setError('Failed to check delivery availability');
+        setIsDeliveryAvailable(false);
+        setIsPickupAvailable(false);
+        setNearestStore(null);
       }
     };
 
-    fetchPickupLocations();
-  }, []);
+    console.log('Address changed, checking delivery availability');
+    checkDeliveryAvailability();
+  }, [selectedAddress]);
 
-  // Fetch the selected address details when it changes
+  // Calculate delivery fee when method or address changes
   useEffect(() => {
-    if (selectedMethod === 'delivery' && selectedAddress) {
-      console.log('Selected address details:', {
-        id: selectedAddress.id,
-        street: selectedAddress.street,
-        city: selectedAddress.city,
-        state: selectedAddress.state,
-        latitude: selectedAddress.latitude,
-        longitude: selectedAddress.longitude,
-        raw: selectedAddress
+    const calculateDeliveryFee = async () => {
+      console.log('Calculating delivery fee:', {
+        method: selectedMethod,
+        hasAddress: !!selectedAddress,
+        isDeliveryAvailable,
+        hasStore: !!nearestStore,
+        subtotal
       });
-      
-      // If address doesn't have coordinates, try to geocode it
-      if (!selectedAddress.latitude || !selectedAddress.longitude) {
-        console.log('Address missing coordinates, attempting to geocode');
-        geocodeAddress(selectedAddress);
-      } else {
-        console.log('Address has coordinates, calculating delivery fee');
-        calculateDeliveryFee();
+
+      if (selectedMethod !== 'delivery' || !selectedAddress || !isDeliveryAvailable || !nearestStore) {
+        console.log('Skipping delivery fee calculation - conditions not met');
+        setDeliveryFee(0);
+        onDeliveryFeeCalculated(0, null);
+        return;
       }
-    }
-  }, [selectedAddress, selectedMethod]);
 
-  // Calculate delivery fee when subtotal changes
-  useEffect(() => {
-    if (selectedMethod === 'delivery' && selectedAddress && selectedAddress.latitude && selectedAddress.longitude) {
-      calculateDeliveryFee();
-    }
-  }, [subtotal]);
+      setLoading(true);
+      setError('');
 
-  // Reset state when delivery method changes
-  useEffect(() => {
-    if (selectedMethod === 'pickup') {
-      setDeliveryFee(0);
-      setDeliveryInfo({
-        fee: 0,
-        estimatedDeliveryTime: null,
-        isDeliveryAvailable: true
-      });
-      onDeliveryFeeCalculated(0, null);
-    }
-  }, [selectedMethod]);
-
-  // Geocode the address to get coordinates
-  const geocodeAddress = async (address) => {
-    setLoading(true);
-    setError(null);
-    
-    try {
-      console.log('Geocoding address:', address);
-      
-      // Construct address string for geocoding
-      const addressString = `${address.street}, ${address.city}, ${address.state}, ${address.country}`;
-      
-      // Use browser's Geocoding API if available
-      if (window.google && window.google.maps && window.google.maps.Geocoder) {
-        const geocoder = new window.google.maps.Geocoder();
-        
-        geocoder.geocode({ address: addressString }, async (results, status) => {
-          if (status === 'OK' && results[0]) {
-            const location = results[0].geometry.location;
-            
-            console.log('Successfully geocoded address:', {
-              address: addressString,
-              lat: location.lat(),
-              lng: location.lng()
-            });
-            
-            // Update the address with coordinates
-            const updatedAddress = {
-              ...selectedAddress,
-              latitude: location.lat(),
-              longitude: location.lng()
-            };
-            
-            // Update the selected address in the component state
-            setSelectedAddress(updatedAddress);
-            
-            // Also update the address in the database so we don't need to geocode again
-            try {
-              const response = await DeliveryService.updateAddressCoordinates(
-                updatedAddress.id,
-                location.lat(),
-                location.lng()
-              );
-              
-              if (response.success) {
-                console.log('Successfully updated address coordinates in database');
-              } else {
-                console.warn('Failed to update address coordinates in database:', response.message);
-              }
-            } catch (error) {
-              console.error('Error updating address coordinates in database:', error);
-            }
-            
-            // Calculate delivery fee with the new coordinates
-            calculateDeliveryFeeWithCoordinates(location.lat(), location.lng());
-          } else {
-            console.error('Geocoding failed:', status);
-            setError('Could not find coordinates for this address. Please select a different address.');
-            setLoading(false);
-          }
+      try {
+        console.log('Calculating fee for:', {
+          latitude: selectedAddress.latitude,
+          longitude: selectedAddress.longitude,
+          subtotal,
+          storeId: nearestStore.id
         });
-      } else {
-        console.error('Google Maps API not available');
-        setError('Unable to calculate delivery fee. Google Maps is not available.');
+
+        const response = await DeliveryService.calculateDeliveryFee(
+          selectedAddress.latitude,
+          selectedAddress.longitude,
+          subtotal,
+          nearestStore.id
+        );
+
+        console.log('Delivery fee calculation response:', response);
+
+        if (response.success) {
+          const data = response.data;
+          console.log('Setting delivery fee:', {
+            fee: data.fee,
+            info: data
+          });
+          setDeliveryFee(data.fee);
+          setDeliveryInfo(data);
+          onDeliveryFeeCalculated(data.fee, data);
+        } else {
+          throw new Error(response.message || 'Failed to calculate delivery fee');
+        }
+      } catch (error) {
+        console.error('Error calculating delivery fee:', error);
+        setError('Failed to calculate delivery fee');
+        onDeliveryFeeCalculated(0, null);
+      } finally {
         setLoading(false);
       }
-    } catch (error) {
-      console.error('Error during geocoding:', error);
-      setError('Error calculating delivery fee. Please try again later.');
-      setLoading(false);
-    }
-  };
+    };
 
-  const calculateDeliveryFeeWithCoordinates = async (latitude, longitude) => {
-    try {
-      const response = await DeliveryService.calculateDeliveryFee(
-        latitude,
-        longitude,
-        subtotal
-      );
-
-      if (response.success) {
-        const data = response.data;
-        setDeliveryFee(data.fee);
-        setDeliveryInfo(data);
-        onDeliveryFeeCalculated(data.fee, data);
-      } else {
-        setError('Failed to calculate delivery fee');
-        onDeliveryFeeCalculated(0, null);
-      }
-    } catch (error) {
-      console.error('Error calculating delivery fee:', error);
-      setError(error.response?.data?.message || 'Error calculating delivery fee');
-      onDeliveryFeeCalculated(0, null);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const calculateDeliveryFee = async () => {
-    console.log('Starting delivery fee calculation with address:', selectedAddress);
-    
-    if (!selectedAddress || !selectedAddress.latitude || !selectedAddress.longitude) {
-      console.error('Invalid address data:', selectedAddress);
-      setError('Invalid address information. Please select a valid address.');
-      return;
-    }
-
-    console.log('Using coordinates for delivery calculation:', {
-      latitude: selectedAddress.latitude,
-      longitude: selectedAddress.longitude,
-      subtotal: subtotal
-    });
-    
-    setLoading(true);
-    setError(null);
-
-    try {
-      const response = await DeliveryService.calculateDeliveryFee(
-        selectedAddress.latitude,
-        selectedAddress.longitude,
-        subtotal
-      );
-      
-      console.log('Delivery fee calculation response:', response);
-
-      if (response.success) {
-        const data = response.data;
-        console.log('Delivery fee calculation successful:', data);
-        setDeliveryFee(data.fee);
-        setDeliveryInfo(data);
-        onDeliveryFeeCalculated(data.fee, data);
-      } else {
-        console.error('Delivery fee calculation failed:', response.message);
-        setError('Failed to calculate delivery fee');
-        onDeliveryFeeCalculated(0, null);
-      }
-    } catch (error) {
-      console.error('Error calculating delivery fee:', error);
-      setError(error.response?.data?.message || 'Error calculating delivery fee');
-      onDeliveryFeeCalculated(0, null);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handlePickupLocationChange = (e) => {
-    setSelectedPickupLocation(parseInt(e.target.value));
-  };
+    calculateDeliveryFee();
+  }, [selectedMethod, selectedAddress, isDeliveryAvailable, nearestStore, subtotal, onDeliveryFeeCalculated]);
 
   return (
-    <div className="mb-6 bg-white p-4 rounded-lg shadow-sm">
-      <h3 className="text-lg font-semibold mb-4">Delivery Method</h3>
+    <div className="mt-4">
+      <h3 className="text-lg font-medium text-gray-900">Delivery Method</h3>
       
-      <div className="flex flex-col space-y-4">
-        <div className="flex items-center space-x-4">
-          <label className="flex items-center cursor-pointer">
-            <input
-              type="radio"
-              name="deliveryMethod"
-              value="delivery"
-              checked={selectedMethod === 'delivery'}
-              onChange={() => onMethodChange('delivery')}
-              className="mr-2"
-            />
-            <span>Delivery</span>
-          </label>
-          
-          <label className="flex items-center cursor-pointer">
-            <input
-              type="radio"
-              name="deliveryMethod"
-              value="pickup"
-              checked={selectedMethod === 'pickup'}
-              onChange={() => onMethodChange('pickup')}
-              className="mr-2"
-            />
-            <span>Pickup</span>
-          </label>
+      {selectedAddress && !isDeliveryAvailable && !isPickupAvailable && (
+        <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-md">
+          <p className="text-red-700">
+            Sorry, this address is outside our delivery and pickup zones. Please try a different address.
+          </p>
         </div>
+      )}
 
-        {selectedMethod === 'delivery' && (
-          <div className="pl-4">
-            {loading && (
-              <div className="flex items-center">
-                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary mr-2"></div>
-                <span className="text-sm">Calculating delivery fee...</span>
-              </div>
-            )}
-            
-            {error && (
-              <p className="text-red-500 text-sm">{error}</p>
-            )}
-            
-            {deliveryInfo && (
-              <div className="text-sm">
-                {deliveryInfo.isDeliveryAvailable && deliveryInfo.estimatedTime > 0 && (
-                  <p className="text-green-600">
-                    Estimated delivery time: Under {deliveryInfo.estimatedTime} minutes
-                  </p>
+      {selectedAddress && (isDeliveryAvailable || isPickupAvailable) && (
+        <div className="mt-4">
+          <div className="space-y-4">
+            <div className="flex items-center">
+              <input
+                type="radio"
+                id="delivery"
+                name="deliveryMethod"
+                value="delivery"
+                checked={selectedMethod === 'delivery'}
+                onChange={() => onMethodChange('delivery')}
+                disabled={!isDeliveryAvailable}
+                className="h-4 w-4 text-primary border-gray-300 focus:ring-primary"
+              />
+              <label htmlFor="delivery" className={`ml-3 block text-sm font-medium ${!isDeliveryAvailable ? 'text-gray-400' : 'text-gray-700'}`}>
+                Delivery
+                {deliveryFee > 0 && isDeliveryAvailable && (
+                  <span className="ml-2 text-sm text-gray-500">
+                    ({formatNaira(deliveryFee)})
+                  </span>
                 )}
-              </div>
-            )}
-          </div>
-        )}
+              </label>
+            </div>
 
-        {selectedMethod === 'pickup' && (
-          <div className="pl-6">
-            {pickupLocations.length === 0 ? (
-              <p className="text-red-500 text-sm">No pickup locations available</p>
-            ) : (
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Select Pickup Location
-                </label>
-                <select
-                  value={selectedPickupLocation || ''}
-                  onChange={handlePickupLocationChange}
-                  className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary"
-                >
-                  {pickupLocations.map(location => (
-                    <option key={location.id} value={location.id}>
-                      {location.name} - {location.address_line1}, {location.city}
-                    </option>
-                  ))}
-                </select>
-                
-                {selectedPickupLocation && (
-                  <div className="mt-2 text-sm text-gray-600">
-                    <p className="font-semibold">Pickup Instructions:</p>
-                    <p>Please bring your order confirmation and ID for pickup.</p>
-                  </div>
-                )}
-              </div>
-            )}
+            <div className="flex items-center">
+              <input
+                type="radio"
+                id="pickup"
+                name="deliveryMethod"
+                value="pickup"
+                checked={selectedMethod === 'pickup'}
+                onChange={() => onMethodChange('pickup')}
+                disabled={!isPickupAvailable}
+                className="h-4 w-4 text-primary border-gray-300 focus:ring-primary"
+              />
+              <label htmlFor="pickup" className={`ml-3 block text-sm font-medium ${!isPickupAvailable ? 'text-gray-400' : 'text-gray-700'}`}>
+                Pickup (Free)
+              </label>
+            </div>
           </div>
-        )}
-      </div>
+
+          {selectedMethod === 'delivery' && (
+            <div className="mt-4 pl-4">
+              {loading && (
+                <div className="flex items-center">
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary mr-2"></div>
+                  <span className="text-sm">Calculating delivery fee...</span>
+                </div>
+              )}
+              
+              {error && (
+                <p className="text-red-500 text-sm">{error}</p>
+              )}
+              
+              {deliveryInfo && isDeliveryAvailable && (
+                <div className="text-sm">
+                  <p className="text-green-600">{deliveryInfo.message}</p>
+                  {deliveryInfo.estimatedTime > 0 && (
+                    <p className="text-green-600">
+                      Estimated delivery time: Under {deliveryInfo.estimatedTime} minutes
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {selectedMethod === 'pickup' && nearestStore && (
+            <div className="mt-4 pl-4">
+              <div className="text-sm text-gray-700">
+                <p className="font-medium">{nearestStore.name}</p>
+                <p>{nearestStore.formatted_address}</p>
+                {nearestStore.phone && <p>Phone: {nearestStore.phone}</p>}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {!selectedAddress && (
+        <p className="mt-4 text-sm text-gray-500">
+          Please select a delivery address to see available options.
+        </p>
+      )}
     </div>
   );
 };

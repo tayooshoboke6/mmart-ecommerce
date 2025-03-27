@@ -16,29 +16,24 @@ const StoreAddresses = () => {
   const [formData, setFormData] = useState({
     name: '',
     address_line1: '',
-    address_line2: '',
     city: '',
     state: '',
-    postal_code: '',
-    country: 'Nigeria',
+    formatted_address: '',
     phone: '',
     email: '',
     latitude: '',
     longitude: '',
-    is_pickup_location: false,
-    is_delivery_location: false,
     is_active: true,
     opening_hours: '',
-    notes: '',
     delivery_base_fee: '0',
-    delivery_price_per_km: '0',
+    delivery_fee_per_km: '0',
     delivery_radius_km: '10',
     free_delivery_threshold: '0',
     minimum_order_value: '0',
-    offers_free_delivery: false,
     geofence_coordinates: '',
     drawing_mode: false,
-    formatted_address: ''
+    is_pickup_location: false,
+    is_delivery_location: false
   });
 
   // Fetch store addresses
@@ -87,38 +82,74 @@ const StoreAddresses = () => {
     });
   };
 
-  // Open modal for creating a new address
-  const handleAddNew = () => {
-    setCurrentAddress(null);
+  const handleInputChange = (e) => {
+    const { name, value, type } = e.target;
+    
+    let formattedValue = value;
+    
+    // Format string decimal fields
+    if (name === 'delivery_fee_per_km' || name === 'minimum_order_value') {
+      // Remove non-numeric characters except decimal point
+      formattedValue = value.replace(/[^0-9.]/g, '');
+      // Ensure only one decimal point
+      const parts = formattedValue.split('.');
+      if (parts.length > 2) {
+        formattedValue = parts[0] + '.' + parts.slice(1).join('');
+      }
+      // Always show 2 decimal places
+      if (!formattedValue.includes('.')) {
+        formattedValue += '.00';
+      } else if (parts[1]?.length === 1) {
+        formattedValue += '0';
+      } else if (parts[1]?.length > 2) {
+        formattedValue = parseFloat(formattedValue).toFixed(2);
+      }
+    }
+    
+    // Handle integer fields
+    if (name === 'delivery_base_fee' || name === 'free_delivery_threshold') {
+      formattedValue = Math.min(parseInt(value) || 0, 99999999);
+    }
+    
+    // Handle delivery radius
+    if (name === 'delivery_radius_km') {
+      formattedValue = Math.max(Math.min(parseInt(value) || -1, 999), -1);
+    }
+
+    setFormData(prev => ({
+      ...prev,
+      [name]: formattedValue
+    }));
+  };
+
+  const resetForm = () => {
     setActiveTab('address');
     setFormData({
       name: '',
-      address_line1: '',
-      address_line2: '',
-      city: '',
-      state: '',
-      postal_code: '',
-      country: 'Nigeria',
+      formatted_address: '',
       phone: '',
       email: '',
       latitude: '',
       longitude: '',
-      is_pickup_location: false,
-      is_delivery_location: false,
       is_active: true,
       opening_hours: '',
-      notes: '',
-      delivery_base_fee: '0',
-      delivery_price_per_km: '0',
-      delivery_radius_km: '10',
-      free_delivery_threshold: '0',
-      minimum_order_value: '0',
-      offers_free_delivery: false,
+      delivery_base_fee: '1500',
+      delivery_fee_per_km: '100.00',
+      delivery_radius_km: '-1',
+      free_delivery_threshold: '99999999',
+      minimum_order_value: '10.00',
       geofence_coordinates: '',
-      drawing_mode: false,
-      formatted_address: ''
+      is_pickup_location: false,
+      is_delivery_location: false
     });
+    setCurrentAddress(null);
     setShowModal(true);
+  };
+
+  // Open modal for creating a new address
+  const handleAddNew = () => {
+    setCurrentAddress(null);
+    resetForm();
   };
 
   // Open modal for editing an existing address
@@ -128,29 +159,24 @@ const StoreAddresses = () => {
     setFormData({
       name: address.name,
       address_line1: address.address_line1,
-      address_line2: address.address_line2 || '',
       city: address.city,
       state: address.state,
-      postal_code: address.postal_code || '',
-      country: address.country || 'Nigeria',
+      formatted_address: address.formatted_address || '',
       phone: address.phone || '',
       email: address.email || '',
       latitude: address.latitude || '',
       longitude: address.longitude || '',
-      is_pickup_location: address.is_pickup_location,
-      is_delivery_location: address.is_delivery_location,
       is_active: address.is_active,
       opening_hours: address.opening_hours || '',
-      notes: address.notes || '',
       delivery_base_fee: address.delivery_base_fee || '0',
-      delivery_price_per_km: address.delivery_price_per_km || '0',
+      delivery_fee_per_km: address.delivery_fee_per_km || '0',
       delivery_radius_km: address.delivery_radius_km || '10',
       free_delivery_threshold: address.free_delivery_threshold || '0',
       minimum_order_value: address.minimum_order_value || '0',
-      offers_free_delivery: address.offers_free_delivery || false,
       geofence_coordinates: address.geofence_coordinates || '',
       drawing_mode: address.drawing_mode || false,
-      formatted_address: address.formatted_address || ''
+      is_pickup_location: address.is_pickup_location,
+      is_delivery_location: address.is_delivery_location
     });
     setShowModal(true);
   };
@@ -160,27 +186,56 @@ const StoreAddresses = () => {
     e.preventDefault();
     
     try {
+      // Convert string numbers to actual numbers and format JSON fields
+      const payload = {
+        name: formData.name,
+        formatted_address: formData.formatted_address,
+        phone: formData.phone || null,
+        email: formData.email || null,
+        latitude: formData.latitude ? parseFloat(formData.latitude) : null,
+        longitude: formData.longitude ? parseFloat(formData.longitude) : null,
+        is_active: formData.is_active,
+        opening_hours: formData.opening_hours ? JSON.stringify({
+          hours: formData.opening_hours
+        }) : null,
+        is_pickup_location: formData.is_pickup_location,
+        is_delivery_location: formData.is_delivery_location,
+        delivery_radius_km: formData.delivery_radius_km ? parseInt(formData.delivery_radius_km) : -1,
+        geofence_coordinates: formData.geofence_coordinates ? JSON.stringify(
+          formData.geofence_coordinates
+            .split('),')
+            .map(coord => {
+              const [lat, lng] = coord
+                .replace('(', '')
+                .replace(')', '')
+                .split(',')
+                .map(num => parseFloat(num.trim()));
+              return [lat, lng];
+            })
+        ) : null,
+        delivery_base_fee: formData.delivery_base_fee ? Math.min(parseFloat(formData.delivery_base_fee), 99999999.99) : 0,
+        delivery_fee_per_km: formData.delivery_fee_per_km ? parseFloat(formData.delivery_fee_per_km).toFixed(2) : "0.00",
+        free_delivery_threshold: formData.free_delivery_threshold ? Math.min(parseFloat(formData.free_delivery_threshold), 99999999.99) : 0,
+        minimum_order_value: formData.minimum_order_value ? parseFloat(formData.minimum_order_value).toFixed(2) : "0.00"
+      };
+      
+      console.log('Submitting store data:', payload);
+      
       let response;
-      
       if (currentAddress) {
-        // Update existing address
-        response = await api.put(`/admin/store-addresses/${currentAddress.id}`, formData);
-        if (response.data.status === 'success') {
-          toast.success('Store address updated successfully');
-        }
+        response = await api.put(`/admin/store-addresses/${currentAddress.id}`, payload);
       } else {
-        // Create new address
-        response = await api.post('/admin/store-addresses', formData);
-        if (response.data.status === 'success') {
-          toast.success('Store address created successfully');
-        }
+        response = await api.post('/admin/store-addresses', payload);
       }
-      
-      setShowModal(false);
-      fetchStoreAddresses();
+
+      if (response.data.status === 'success') {
+        toast.success(currentAddress ? 'Store updated successfully' : 'Store created successfully');
+        setShowModal(false);
+        fetchStoreAddresses();
+      }
     } catch (error) {
       console.error('Error saving store address:', error);
-      toast.error('Error saving store address');
+      toast.error(`Failed to save store: ${error.response?.data?.message || error.message}`);
     }
   };
 
@@ -271,26 +326,20 @@ const StoreAddresses = () => {
                         <div>
                           <div>{address.formatted_address}</div>
                           <div className="text-xs text-gray-500 mt-1">
-                            {address.address_line1}{address.address_line2 ? `, ${address.address_line2}` : ''}
-                            {address.city && `, ${address.city}`}
+                            {address.address_line1}{address.city && `, ${address.city}`}
                             {address.state && `, ${address.state}`}
-                            {address.postal_code && ` ${address.postal_code}`}
                           </div>
                         </div>
                       ) : (
                         <div>
-                          {address.address_line1}{address.address_line2 ? `, ${address.address_line2}` : ''}
+                          {address.address_line1}{address.city && `, ${address.city}`}
                           <br />
-                          {address.city}{address.state ? `, ${address.state}` : ''}
-                          {address.postal_code && ` ${address.postal_code}`}
+                          {address.state}
                         </div>
                       )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="text-sm text-gray-900">{address.city}, {address.state}</div>
-                      {address.postal_code && (
-                        <div className="text-sm text-gray-500">{address.postal_code}</div>
-                      )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       {address.phone && (
@@ -405,48 +454,23 @@ const StoreAddresses = () => {
                         <GooglePlacesAutocomplete
                           value={formData.address_line1}
                           onChange={(value) => {
-                            // Only update address_line1 when typing, not when selecting from dropdown
                             if (!value.includes(',')) {
                               setFormData({...formData, address_line1: value});
                             }
                           }}
                           onSelect={(addressData) => {
-                            console.log('Address selected in StoreAddresses:', addressData);
-                            // Ensure all fields are updated with the selected address data
-                            setFormData(prevData => {
-                              const newData = {
-                                ...prevData,
-                                address_line1: addressData.address_line1 || prevData.address_line1,
-                                address_line2: addressData.address_line2 || prevData.address_line2,
-                                formatted_address: addressData.formatted_address || prevData.formatted_address,
-                                city: addressData.city || prevData.city,
-                                state: addressData.state || prevData.state,
-                                postal_code: addressData.postal_code || prevData.postal_code,
-                                country: addressData.country || prevData.country,
-                                latitude: addressData.latitude?.toString() || prevData.latitude,
-                                longitude: addressData.longitude?.toString() || prevData.longitude
-                              };
-                              console.log('Previous form data:', prevData);
-                              console.log('New form data after update:', newData);
-                              return newData;
-                            });
+                            setFormData(prevData => ({
+                              ...prevData,
+                              address_line1: addressData.address_line1 || prevData.address_line1,
+                              formatted_address: addressData.formatted_address || prevData.formatted_address,
+                              city: addressData.city || prevData.city,
+                              state: addressData.state || prevData.state,
+                              latitude: addressData.latitude?.toString() || prevData.latitude,
+                              longitude: addressData.longitude?.toString() || prevData.longitude
+                            }));
                           }}
                           placeholder="Enter address"
                           className="w-full"
-                        />
-                      </div>
-                      
-                      {/* Address Line 2 */}
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Address Line 2
-                        </label>
-                        <input
-                          type="text"
-                          name="address_line2"
-                          value={formData.address_line2}
-                          onChange={handleChange}
-                          className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-primary focus:border-primary"
                         />
                       </div>
                       
@@ -489,34 +513,6 @@ const StoreAddresses = () => {
                           type="text"
                           name="state"
                           value={formData.state}
-                          onChange={handleChange}
-                          className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-primary focus:border-primary"
-                        />
-                      </div>
-                      
-                      {/* Postal Code */}
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Postal Code
-                        </label>
-                        <input
-                          type="text"
-                          name="postal_code"
-                          value={formData.postal_code}
-                          onChange={handleChange}
-                          className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-primary focus:border-primary"
-                        />
-                      </div>
-                      
-                      {/* Country */}
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Country
-                        </label>
-                        <input
-                          type="text"
-                          name="country"
-                          value={formData.country}
                           onChange={handleChange}
                           className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-primary focus:border-primary"
                         />
@@ -594,20 +590,6 @@ const StoreAddresses = () => {
                           placeholder="e.g. Mon-Fri: 9am-5pm, Sat: 10am-2pm, Sun: Closed"
                         ></textarea>
                       </div>
-                      
-                      {/* Notes */}
-                      <div className="md:col-span-2">
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Notes
-                        </label>
-                        <textarea
-                          name="notes"
-                          value={formData.notes}
-                          onChange={handleChange}
-                          rows="2"
-                          className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-primary focus:border-primary"
-                        ></textarea>
-                      </div>
                     </div>
                   )}
                   
@@ -675,15 +657,18 @@ const StoreAddresses = () => {
                       {/* Delivery Radius */}
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Delivery Radius (km)
+                          Delivery Radius (KM)
                         </label>
                         <input
                           type="number"
-                          step="1"
                           name="delivery_radius_km"
                           value={formData.delivery_radius_km}
-                          onChange={handleChange}
-                          className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-primary focus:border-primary"
+                          onChange={handleInputChange}
+                          className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                          placeholder="-1"
+                          min="-1"
+                          max="999"
+                          step="1"
                         />
                       </div>
                       
@@ -743,82 +728,70 @@ const StoreAddresses = () => {
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         {/* Delivery Base Fee */}
                         <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">
-                            Base Delivery Fee (₦)
+                          <label className="block text-gray-700 text-sm font-bold mb-2">
+                            Delivery Base Fee (₦)
                           </label>
-                          <div className="relative">
-                            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                              <span className="text-gray-500 sm:text-sm">₦</span>
-                            </div>
-                            <input
-                              type="number"
-                              step="0.01"
-                              name="delivery_base_fee"
-                              value={formData.delivery_base_fee}
-                              onChange={handleChange}
-                              className="w-full border border-gray-300 rounded-md pl-7 pr-3 py-2 focus:outline-none focus:ring-primary focus:border-primary"
-                            />
-                          </div>
+                          <input
+                            type="number"
+                            name="delivery_base_fee"
+                            value={formData.delivery_base_fee}
+                            onChange={handleInputChange}
+                            className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                            placeholder="1500"
+                            min="0"
+                            max="99999999"
+                            step="1"
+                          />
                         </div>
                         
-                        {/* Delivery Price Per KM */}
+                        {/* Delivery Fee Per KM */}
                         <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">
-                            Fee Per Kilometer (₦)
+                          <label className="block text-gray-700 text-sm font-bold mb-2">
+                            Delivery Fee per KM (₦)
                           </label>
-                          <div className="relative">
-                            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                              <span className="text-gray-500 sm:text-sm">₦</span>
-                            </div>
-                            <input
-                              type="number"
-                              step="0.01"
-                              name="delivery_price_per_km"
-                              value={formData.delivery_price_per_km}
-                              onChange={handleChange}
-                              className="w-full border border-gray-300 rounded-md pl-7 pr-3 py-2 focus:outline-none focus:ring-primary focus:border-primary"
-                            />
-                          </div>
+                          <input
+                            type="text"
+                            name="delivery_fee_per_km"
+                            value={formData.delivery_fee_per_km}
+                            onChange={handleInputChange}
+                            className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                            placeholder="100.00"
+                            pattern="\d+\.\d{2}"
+                          />
                         </div>
                         
                         {/* Free Delivery Threshold */}
                         <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                          <label className="block text-gray-700 text-sm font-bold mb-2">
                             Free Delivery Threshold (₦)
                           </label>
-                          <div className="relative">
-                            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                              <span className="text-gray-500 sm:text-sm">₦</span>
-                            </div>
-                            <input
-                              type="number"
-                              step="0.01"
-                              name="free_delivery_threshold"
-                              value={formData.free_delivery_threshold}
-                              onChange={handleChange}
-                              className="w-full border border-gray-300 rounded-md pl-7 pr-3 py-2 focus:outline-none focus:ring-primary focus:border-primary"
-                            />
-                          </div>
+                          <input
+                            type="number"
+                            name="free_delivery_threshold"
+                            value={formData.free_delivery_threshold}
+                            onChange={handleInputChange}
+                            className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                            placeholder="10000000"
+                            min="0"
+                            max="99999999"
+                            step="1"
+                          />
                         </div>
                         
                         {/* Minimum Order Value */}
                         <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                          <label className="block text-gray-700 text-sm font-bold mb-2">
                             Minimum Order Value (₦)
                           </label>
-                          <div className="relative">
-                            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                              <span className="text-gray-500 sm:text-sm">₦</span>
-                            </div>
-                            <input
-                              type="number"
-                              step="0.01"
-                              name="minimum_order_value"
-                              value={formData.minimum_order_value}
-                              onChange={handleChange}
-                              className="w-full border border-gray-300 rounded-md pl-7 pr-3 py-2 focus:outline-none focus:ring-primary focus:border-primary"
-                            />
-                          </div>
+                          <input
+                            type="text"
+                            name="minimum_order_value"
+                            value={formData.minimum_order_value}
+                            onChange={handleInputChange}
+                            className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                            placeholder="10.00"
+                            pattern="\d+\.\d{2}"
+                          />
                         </div>
                       </div>
                     </div>

@@ -97,7 +97,7 @@ class AddressController extends Controller
             'street' => 'required|string|max:255',
             'city' => 'required|string|max:100',
             'state' => 'required|string|max:100',
-            'postalCode' => 'required|string|max:20',
+            'postalCode' => 'nullable|string|max:20',
             'country' => 'required|string|max:100',
             'latitude' => 'nullable|numeric',
             'longitude' => 'nullable|numeric'
