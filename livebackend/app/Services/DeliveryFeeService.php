@@ -3,7 +3,6 @@
 namespace App\Services;
 
 use App\Models\StoreAddress;
-use App\Models\DeliverySettings;
 use App\Models\Order;
 use Illuminate\Support\Facades\Log;
 
@@ -47,7 +46,7 @@ class DeliveryFeeService
                 'store_id' => $store->id,
                 'store_name' => $store->name,
                 'store_location' => [$store->latitude, $store->longitude],
-                'delivery_radius_km' => $store->delivery_radius_km
+                'has_geofence' => !empty($store->geofence_coordinates)
             ]);
             
             // Validate store location
@@ -59,36 +58,59 @@ class DeliveryFeeService
                 return $this->getErrorResponse("Store location is invalid");
             }
             
-            // Check if the customer is within delivery zone
+            // Calculate distance between customer and store
             $storeLocation = [$store->latitude, $store->longitude];
             $distanceInKm = $this->calculateDistance($customerLocation, $storeLocation);
             
             Log::info('DeliveryFeeService: Distance calculation', [
                 'customerLocation' => $customerLocation,
                 'storeLocation' => $storeLocation,
-                'distanceInKm' => $distanceInKm,
-                'delivery_radius_km' => $store->delivery_radius_km
+                'distanceInKm' => $distanceInKm
             ]);
             
-            $withinZone = $this->isWithinDeliveryZone($customerLocation, $store);
-            
-            if (!$withinZone) {
-                Log::warning('DeliveryFeeService: Customer outside delivery zone', [
+            // Check if customer is within geofence (if available)
+            $isWithinDeliveryZone = true;
+            if (!empty($store->geofence_coordinates)) {
+                $isWithinDeliveryZone = $this->isPointInPolygon(
+                    $customerLocation[0], 
+                    $customerLocation[1], 
+                    json_decode($store->geofence_coordinates, true)
+                );
+                
+                Log::info('DeliveryFeeService: Geofence check', [
+                    'isWithinGeofence' => $isWithinDeliveryZone,
                     'customerLocation' => $customerLocation,
-                    'deliveryRadius' => $store->delivery_radius_km,
-                    'distance' => $distanceInKm
+                    'geofence' => json_decode($store->geofence_coordinates, true)
                 ]);
-                return $this->getErrorResponse("Sorry, we don't currently deliver to your location.");
+                
+                if (!$isWithinDeliveryZone) {
+                    Log::warning('DeliveryFeeService: Customer outside geofence', [
+                        'customerLocation' => $customerLocation,
+                        'distance' => $distanceInKm
+                    ]);
+                    return $this->getErrorResponse("Sorry, we don't currently deliver to your location.", $distanceInKm);
+                }
             }
             
-            // Get global delivery settings
+            // Get global settings
             $globalSettings = $this->getGlobalSettings();
             
             // Get store delivery settings
-            $baseFee = $store->delivery_base_fee ?? $globalSettings->base_fee ?? 500; // Default: ₦500 base fee
-            $feePerKm = $store->delivery_fee_per_km ?? $globalSettings->fee_per_km ?? 100; // Default: ₦100 per km
-            $freeThreshold = $store->delivery_free_threshold ?? $globalSettings->free_threshold ?? 10000; // Default: Free for orders over ₦10,000
-            $minOrder = $store->delivery_min_order ?? $globalSettings->min_order ?? 0; // Default: No minimum order
+            $baseFee = $store->delivery_base_fee ?? $globalSettings['base_fee'] ?? 500; // Default: ₦500 base fee
+            $feePerKm = $store->delivery_fee_per_km ?? $globalSettings['fee_per_km'] ?? 100; // Default: ₦100 per km
+            $freeThreshold = $store->free_delivery_threshold ?? $globalSettings['free_threshold'] ?? 10000; // Default: Free for orders over ₦10,000
+            $minOrder = $store->minimum_order_value ?? $globalSettings['min_order'] ?? 0; // Default: No minimum order
+            
+            // Debug the actual values from the store
+            Log::info('DeliveryFeeService: DEBUG STORE VALUES', [
+                'store_id' => $store->id,
+                'delivery_base_fee' => $store->delivery_base_fee,
+                'delivery_fee_per_km' => $store->delivery_fee_per_km,
+                'free_delivery_threshold' => $store->free_delivery_threshold,
+                'minimum_order_value' => $store->minimum_order_value,
+                'subtotal' => $subtotal,
+                'is_free' => $subtotal >= $freeThreshold
+            ]);
             
             Log::info('DeliveryFeeService: Delivery settings', [
                 'baseFee' => $baseFee,
@@ -152,8 +174,16 @@ class DeliveryFeeService
             
             return $result;
         } catch (\Exception $e) {
-            Log::error('Error calculating delivery fee: ' . $e->getMessage());
-            return $this->getErrorResponse("Unable to calculate delivery fee");
+            Log::error('Error calculating delivery fee: ' . $e->getMessage(), [
+                'exception' => get_class($e),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+                'trace' => $e->getTraceAsString(),
+                'customer_location' => $customerLocation ?? null,
+                'store_id' => $storeId ?? null,
+                'subtotal' => $subtotal ?? null
+            ]);
+            return $this->getErrorResponse("Unable to calculate delivery fee: " . $e->getMessage());
         }
     }
     
@@ -178,52 +208,70 @@ class DeliveryFeeService
     /**
      * Get global delivery settings
      *
-     * @return DeliverySettings|null
+     * @return array
      */
-    protected function getGlobalSettings(): ?DeliverySettings
+    protected function getGlobalSettings(): array
     {
-        return DeliverySettings::where('is_global', true)
-            ->where('is_active', true)
-            ->first();
+        try {
+            Log::info('DeliveryFeeService: Using default global settings (delivery_settings table not found)');
+            return [
+                'base_fee' => 500,           // Default: ₦500 base fee
+                'fee_per_km' => 100,         // Default: ₦100 per km
+                'free_threshold' => 10000,   // Default: Free for orders over ₦10,000
+                'min_order' => 0,            // Default: No minimum order
+                'max_distance' => 20         // Default: Maximum 20km delivery radius
+            ];
+        } catch (\Exception $e) {
+            Log::error('Error getting global settings: ' . $e->getMessage());
+            return [
+                'base_fee' => 500,
+                'fee_per_km' => 100,
+                'free_threshold' => 10000,
+                'min_order' => 0,
+                'max_distance' => 20
+            ];
+        }
     }
     
     /**
-     * Check if a location is within a store's delivery zone
+     * Check if a point is within a polygon
      *
-     * @param array $customerLocation [latitude, longitude]
-     * @param StoreAddress $store
+     * @param float $x Point's x-coordinate
+     * @param float $y Point's y-coordinate
+     * @param array $polygon Polygon's coordinates
      * @return bool
      */
-    protected function isWithinDeliveryZone(array $customerLocation, StoreAddress $store): bool
+    protected function isPointInPolygon(float $x, float $y, array $polygon): bool
     {
-        // Get global settings
-        $globalSettings = $this->getGlobalSettings();
-        $maxDistance = $globalSettings ? $globalSettings->max_distance : 20; // Default: 20km
+        $n = count($polygon);
+        $inside = false;
         
-        // Use store-specific radius if available, otherwise use global max distance
-        $radius = $store->delivery_radius_km ?? $maxDistance;
+        $p1x = $polygon[0][0];
+        $p1y = $polygon[0][1];
         
-        Log::info('DeliveryFeeService: Checking delivery zone', [
-            'store_delivery_radius' => $store->delivery_radius_km,
-            'global_max_distance' => $maxDistance,
-            'effective_radius' => $radius
-        ]);
-        
-        if (!$radius) {
-            Log::warning('DeliveryFeeService: No delivery radius defined');
-            return false;
+        for ($i = 1; $i <= $n; $i++) {
+            $p2x = $polygon[$i % $n][0];
+            $p2y = $polygon[$i % $n][1];
+            
+            if ($y > min($p1y, $p2y)) {
+                if ($y <= max($p1y, $p2y)) {
+                    if ($x <= max($p1x, $p2x)) {
+                        if ($p1y != $p2y) {
+                            $xinters = ($y - $p1y) * ($p2x - $p1x) / ($p2y - $p1y) + $p1x;
+                        }
+                        
+                        if ($p1x == $p2x || $x <= $xinters) {
+                            $inside = !$inside;
+                        }
+                    }
+                }
+            }
+            
+            $p1x = $p2x;
+            $p1y = $p2y;
         }
         
-        $storeLocation = [$store->latitude, $store->longitude];
-        $distance = $this->calculateDistance($customerLocation, $storeLocation);
-        
-        Log::info('DeliveryFeeService: Distance check', [
-            'distance' => $distance,
-            'radius' => $radius,
-            'within_radius' => $distance <= $radius
-        ]);
-        
-        return $distance <= $radius;
+        return $inside;
     }
     
     /**
@@ -233,7 +281,7 @@ class DeliveryFeeService
      * @param array $point2 [latitude, longitude]
      * @return float Distance in kilometers
      */
-    protected function calculateDistance(array $point1, array $point2): float
+    public function calculateDistance(array $point1, array $point2): float
     {
         $lat1 = $point1[0];
         $lon1 = $point1[1];
