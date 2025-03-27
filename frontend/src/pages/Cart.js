@@ -514,7 +514,7 @@ const Cart = () => {
                   </div>
                   {taxAmount > 0 && (
                     <div className="flex justify-between text-sm text-gray-600">
-                      <span>Tax ({(taxRate * 100).toFixed(1)}%)</span>
+                      <span>Tax ({taxRate.toFixed(1)}%)</span>
                       <span>{formatNaira(taxAmount)}</span>
                     </div>
                   )}

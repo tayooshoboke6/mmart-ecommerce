@@ -16,20 +16,18 @@ use GuzzleHttp\Client;
 class PaymentController extends Controller
 {
     /**
-     * Process payment for an order
-     * 
+     * Process a payment for an order.
+     *
      * @param Request $request
-     * @param int $orderId
      * @return \Illuminate\Http\JsonResponse
      */
-    public function processPayment(Request $request, $orderId)
+    public function processPayment(Request $request)
     {
         try {
             // Log the start of payment processing
             Log::info('Starting payment processing', [
-                'order_id' => $orderId,
                 'payment_method' => $request->payment_method,
-                'user_id' => Auth::id()
+                'request_data' => $request->except(['card_number', 'cvv', 'expiry_month', 'expiry_year'])
             ]);
 
             // Validate request data
@@ -40,18 +38,18 @@ class PaymentController extends Controller
                 'email' => 'required|email',
                 'phone_number' => 'required|string',
                 'name' => 'required|string',
+                'order_id' => 'required|integer|exists:orders,id',
             ]);
 
             if ($validator->fails()) {
-                Log::warning('Payment validation failed', [
-                    'errors' => $validator->errors()->toArray()
-                ]);
                 return response()->json([
                     'status' => 'error',
                     'message' => 'Validation failed',
                     'errors' => $validator->errors()
                 ], 422);
             }
+
+            $orderId = $request->order_id;
 
             // Find the order
             $order = Order::find($orderId);
@@ -99,7 +97,7 @@ class PaymentController extends Controller
                 $publicKey = env('FLUTTERWAVE_PUBLIC_KEY');
                 $secretKey = env('FLUTTERWAVE_SECRET_KEY');
                 $encryptionKey = env('FLUTTERWAVE_ENCRYPTION_KEY');
-                
+
                 // Ensure API keys are available
                 if (empty($secretKey) || empty($publicKey)) {
                     Log::error('Flutterwave API keys not configured', [
@@ -111,57 +109,43 @@ class PaymentController extends Controller
                         'message' => 'Payment gateway not properly configured'
                     ], 500);
                 }
-                
+
                 // Ensure the order exists and has a valid amount
                 if (!$order || !$order->grand_total) {
                     Log::error('Order not found or has invalid amount', [
                         'order_id' => $orderId,
                         'grand_total' => $order ? $order->grand_total : null
                     ]);
-                    
+
                     return response()->json([
                         'status' => 'error',
                         'message' => 'Order not found or has invalid amount'
                     ], 400);
                 }
-                
+
                 // Ensure the amount is properly formatted as a number with 2 decimal places
                 $amount = number_format((float) $order->grand_total, 2, '.', '');
-                
-                // Convert amount to kobo (smallest unit) by multiplying by 100 as required by Flutterwave
-                $amountInKobo = (int)($amount * 100);
-                
-                // Check if amount exceeds Flutterwave's test mode limit (500,000 NGN)
-                $originalAmount = $amountInKobo;
-                if ($amountInKobo > 50000000) { // 500,000 NGN in kobo
-                    $amountInKobo = 500000; // Scale down to 5,000 NGN for testing
-                    Log::info('Amount scaled down for testing', [
-                        'original_amount' => $originalAmount / 100, // Convert back to NGN for logging
-                        'scaled_amount' => $amountInKobo / 100, // Convert back to NGN for logging
-                    ]);
-                }
-                
+
                 // Log the order details for debugging
                 Log::info('Order details', [
                     'order_id' => $order->id,
                     'grand_total' => $order->grand_total,
                     'amount_for_payment' => $amount,
-                    'amount_in_kobo' => $amountInKobo
                 ]);
-                
+
                 // Prepare payment data
                 $paymentData = [
                     'tx_ref' => $tx_ref,
-                    'amount' => $amountInKobo / 100,
+                    'amount' => (float) $amount,
                     'currency' => $request->currency ?? 'NGN',
                     'payment_options' => 'card',
-                    'redirect_url' => env('FLUTTERWAVE_CALLBACK_URL', 'https://m-martplus.com/payments/callback'),
+                    'redirect_url' => $request->redirect_url ?? env('FLUTTERWAVE_CALLBACK_URL', 'https://m-martplus.com/payments/callback'),
                     'customer' => [
                         'email' => $request->email ?? 'customer@example.com',
-                        'phonenumber' => $request->phone_number ?? '08012345678', // Using 'phonenumber' instead of 'phone_number'
+                        'phone_number' => $request->phone_number ?? '08012345678',
                         'name' => $request->name ?? 'Customer'
                     ],
-                    'meta' => [
+                    'meta' => $request->meta ?? [
                         'order_id' => $order->id,
                         'user_id' => Auth::id() ?? $order->user_id
                     ],
@@ -171,27 +155,28 @@ class PaymentController extends Controller
                         'logo' => 'https://cdn.pixabay.com/photo/2016/11/07/13/04/yoga-1805784_960_720.png'
                     ]
                 ];
-                
+
                 // Log payment data (excluding sensitive information)
                 Log::info('Payment data prepared', [
                     'tx_ref' => $tx_ref,
                     'amount' => $amount,
                     'currency' => $request->currency,
                     'payment_method' => $request->payment_method,
-                    'order_id' => $order->id
+                    'order_id' => $order->id,
+                    'redirect_url' => $paymentData['redirect_url']
                 ]);
-                
+
                 // Initialize payment using Flutterwave API directly
                 $client = new Client();
-                
+
                 // Log the API request (excluding sensitive information)
                 Log::info('Sending request to Flutterwave API', [
                     'url' => 'https://api.flutterwave.com/v3/payments',
                     'tx_ref' => $tx_ref,
-                    'amount' => $amountInKobo / 100,
+                    'amount' => $amount,
                     'has_secret_key' => !empty($secretKey)
                 ]);
-                
+
                 $response = $client->request('POST', 'https://api.flutterwave.com/v3/payments', [
                     'headers' => [
                         'Authorization' => 'Bearer ' . trim($secretKey),
@@ -200,11 +185,11 @@ class PaymentController extends Controller
                     'json' => $paymentData,
                     'http_errors' => false, // Don't throw exceptions for HTTP errors
                 ]);
-                
+
                 $statusCode = $response->getStatusCode();
                 $responseBody = $response->getBody()->getContents();
                 $responseData = json_decode($responseBody, true);
-                
+
                 Log::info('Flutterwave API response', [
                     'status_code' => $statusCode,
                     'response_status' => $responseData['status'] ?? 'unknown',
@@ -212,20 +197,20 @@ class PaymentController extends Controller
                     'has_data' => isset($responseData['data']),
                     'has_link' => isset($responseData['data']['link'])
                 ]);
-                
+
                 // Check if the response contains the expected data
                 if ($statusCode !== 200 || !isset($responseData['data']['link'])) {
                     Log::error('Flutterwave API error', [
                         'status_code' => $statusCode,
                         'response' => $responseData
                     ]);
-                    
+
                     return response()->json([
                         'status' => 'error',
                         'message' => 'Payment initialization failed: ' . ($responseData['message'] ?? 'Unknown error')
                     ], 500);
                 }
-                
+
                 // Create a new payment record
                 $payment = new Payment();
                 $payment->order_id = $order->id;
@@ -239,7 +224,7 @@ class PaymentController extends Controller
                     'customer_name' => $request->name,
                     'customer_phone' => $request->phone_number
                 ]);
-                
+
                 // Log payment record before saving
                 Log::info('Creating payment record', [
                     'order_id' => $payment->order_id,
@@ -247,7 +232,7 @@ class PaymentController extends Controller
                     'payment_method' => $payment->payment_method,
                     'transaction_reference' => $payment->transaction_reference
                 ]);
-                
+
                 $payment->save();
 
                 // Return the payment link
@@ -305,12 +290,12 @@ class PaymentController extends Controller
             if (!$transactionId && $request->has('transaction_id')) {
                 $transactionId = $request->input('transaction_id');
             }
-            
+
             // If still no transaction_id, check if it's in the query string
             if (!$transactionId) {
                 $transactionId = $request->query('transaction_id');
             }
-            
+
             // If still no transaction ID, check tx_ref and try to find the payment
             if (!$transactionId && $request->tx_ref) {
                 $payment = Payment::where('transaction_reference', $request->tx_ref)->first();
@@ -322,19 +307,19 @@ class PaymentController extends Controller
                     ]);
                 }
             }
-            
+
             // Check if the transaction was successful based on status parameter
             $status = $request->status ?? $request->input('status') ?? $request->query('status');
-            
+
             if ($status === 'successful' || $status === 'completed') {
                 // If we have a transaction ID, verify it
                 if ($transactionId) {
                     try {
                         $client = new \GuzzleHttp\Client();
-                        
+
                         // Get the secret key with proper trimming
                         $secretKey = trim(env('FLUTTERWAVE_SECRET_KEY'));
-                        
+
                         // Verify the transaction
                         $response = $client->request('GET', 'https://api.flutterwave.com/v3/transactions/' . $transactionId . '/verify', [
                             'headers' => [
@@ -343,37 +328,37 @@ class PaymentController extends Controller
                             ],
                             'http_errors' => false, // Don't throw exceptions for HTTP errors
                         ]);
-                        
+
                         $responseData = json_decode($response->getBody(), true);
-                        
+
                         Log::info('Payment verification response', [
                             'response' => $responseData,
                             'tx_ref' => $request->tx_ref
                         ]);
-        
+
                         // Check if verification was successful
                         if (isset($responseData['status']) && $responseData['status'] === 'success' && 
                             isset($responseData['data']['status']) && $responseData['data']['status'] === 'successful') {
-                            
+
                             // Extract the transaction reference
                             $txRef = $responseData['data']['tx_ref'];
-                            
+
                             // Find the payment record
                             $payment = Payment::where('transaction_reference', $txRef)->first();
-                            
+
                             if ($payment) {
                                 // Update payment record
                                 $payment->status = 'completed';
                                 $payment->transaction_id = $transactionId;
                                 $payment->payment_details = json_encode($responseData);
                                 $payment->save();
-                                
+
                                 // Update order status if applicable
                                 if ($payment->order) {
                                     $payment->order->payment_status = 'paid';
                                     $payment->order->status = 'processing'; // Update order status to processing
                                     $payment->order->save();
-                                    
+
                                     try {
                                         $user = User::find($payment->order->user_id);
                                         Log::info('Preparing to send order confirmation email', [
@@ -382,14 +367,14 @@ class PaymentController extends Controller
                                             'user_id' => $user->id,
                                             'user_email' => $user->email
                                         ]);
-                                        
+
                                         NotificationService::sendOrderConfirmation($payment->order);
-                                        
+
                                         Log::info('Order confirmation email sent successfully', [
                                             'order_id' => $payment->order->id,
                                             'user_email' => $user->email
                                         ]);
-                                        
+
                                         // Set email status for frontend response
                                         $emailSent = true;
                                     } catch (\Exception $e) {
@@ -398,16 +383,16 @@ class PaymentController extends Controller
                                             'error' => $e->getMessage(),
                                             'trace' => $e->getTraceAsString()
                                         ]);
-                                        
+
                                         // Set email status for frontend response
                                         $emailSent = false;
                                     }
-                                    
+
                                     Log::info('Order confirmation email sent', [
                                         'order_id' => $payment->order->id,
                                         'user_email' => $user->email
                                     ]);
-                                    
+
                                     // Redirect to success page
                                     if ($payment->order) {
                                         return redirect()->route('orders.success', ['id' => $payment->order->id]);
@@ -422,7 +407,7 @@ class PaymentController extends Controller
                                 Log::error('Payment record not found for transaction reference', [
                                     'tx_ref' => $txRef
                                 ]);
-                                
+
                                 return redirect()->route('payment.error')
                                     ->with('error', 'Payment verification failed: Payment record not found');
                             }
@@ -431,7 +416,7 @@ class PaymentController extends Controller
                             Log::warning('Payment verification failed', [
                                 'response' => $responseData
                             ]);
-                            
+
                             return redirect()->route('payment.error')
                                 ->with('error', 'Payment verification failed: ' . ($responseData['message'] ?? 'Unknown error'));
                         }
@@ -440,7 +425,7 @@ class PaymentController extends Controller
                             'message' => $e->getMessage(),
                             'trace' => $e->getTraceAsString()
                         ]);
-                        
+
                         return redirect()->route('payment.error')
                             ->with('error', 'Payment verification failed: ' . $e->getMessage());
                     }
@@ -449,7 +434,7 @@ class PaymentController extends Controller
                     Log::warning('Status is successful but no transaction ID', [
                         'request_data' => $request->all()
                     ]);
-                    
+
                     // Try to find payment by tx_ref
                     if ($request->tx_ref) {
                         $payment = Payment::where('transaction_reference', $request->tx_ref)->first();
@@ -457,13 +442,13 @@ class PaymentController extends Controller
                             // Mark as completed based on status only
                             $payment->status = 'completed';
                             $payment->save();
-                            
+
                             // Update order status if applicable
                             if ($payment->order) {
                                 $payment->order->payment_status = 'paid';
                                 $payment->order->status = 'processing'; // Update order status to processing
                                 $payment->order->save();
-                                
+
                                 try {
                                     $user = User::find($payment->order->user_id);
                                     Log::info('Preparing to send order confirmation email', [
@@ -472,14 +457,14 @@ class PaymentController extends Controller
                                         'user_id' => $user->id,
                                         'user_email' => $user->email
                                     ]);
-                                    
+
                                     NotificationService::sendOrderConfirmation($payment->order);
-                                    
+
                                     Log::info('Order confirmation email sent successfully', [
                                         'order_id' => $payment->order->id,
                                         'user_email' => $user->email
                                     ]);
-                                    
+
                                     // Set email status for frontend response
                                     $emailSent = true;
                                 } catch (\Exception $e) {
@@ -488,23 +473,23 @@ class PaymentController extends Controller
                                         'error' => $e->getMessage(),
                                         'trace' => $e->getTraceAsString()
                                     ]);
-                                    
+
                                     // Set email status for frontend response
                                     $emailSent = false;
                                 }
-                                
+
                                 Log::info('Order confirmation email sent', [
                                     'order_id' => $payment->order->id,
                                     'user_email' => $user->email
                                 ]);
-                                
+
                                 return redirect()->route('orders.success', ['id' => $payment->order->id]);
                             } else {
                                 return redirect()->route('payment.success');
                             }
                         }
                     }
-                    
+
                     return redirect()->route('payment.error')
                         ->with('error', 'Payment verification failed: No transaction ID found');
                 }
@@ -514,7 +499,7 @@ class PaymentController extends Controller
                     'status' => $status,
                     'request_data' => $request->all()
                 ]);
-                
+
                 return redirect()->route('payment.error')
                     ->with('error', 'Payment was not successful: ' . ($status ?? 'Unknown status'));
             }
@@ -523,7 +508,7 @@ class PaymentController extends Controller
                 'message' => $e->getMessage(),
                 'trace' => $e->getTraceAsString()
             ]);
-            
+
             return redirect()->route('payment.error')
                 ->with('error', 'Payment processing error: ' . $e->getMessage());
         }
@@ -550,9 +535,9 @@ class PaymentController extends Controller
                     'Authorization' => 'Bearer ' . env('FLUTTERWAVE_SECRET_KEY'),
                 ],
             ]);
-            
+
             $responseData = json_decode($response->getBody(), true);
-            
+
             Log::info('Payment verification response', [
                 'response' => $responseData,
                 'transaction_id' => $transactionId
@@ -562,24 +547,24 @@ class PaymentController extends Controller
             if ($responseData['status'] === 'success' && $responseData['data']['status'] === 'successful') {
                 // Extract the transaction reference
                 $txRef = $responseData['data']['tx_ref'];
-                
+
                 // Find the payment record
                 $payment = Payment::where('transaction_reference', $txRef)->first();
-                
+
                 if ($payment) {
                     // Update payment status
                     $payment->status = 'completed';
                     $payment->transaction_id = $transactionId;
                     $payment->payment_details = json_encode($responseData);
                     $payment->save();
-                    
+
                     // Update order payment status
                     $order = Order::find($payment->order_id);
                     if ($order) {
                         $order->payment_status = 'paid';
                         $order->status = 'processing'; // Update order status to processing
                         $order->save();
-                        
+
                         try {
                             $user = User::find($order->user_id);
                             Log::info('Preparing to send order confirmation email', [
@@ -588,14 +573,14 @@ class PaymentController extends Controller
                                 'user_id' => $user->id,
                                 'user_email' => $user->email
                             ]);
-                            
+
                             NotificationService::sendOrderConfirmation($order);
-                            
+
                             Log::info('Order confirmation email sent successfully', [
                                 'order_id' => $order->id,
                                 'user_email' => $user->email
                             ]);
-                            
+
                             // Set email status for frontend response
                             $emailSent = true;
                         } catch (\Exception $e) {
@@ -604,16 +589,16 @@ class PaymentController extends Controller
                                 'error' => $e->getMessage(),
                                 'trace' => $e->getTraceAsString()
                             ]);
-                            
+
                             // Set email status for frontend response
                             $emailSent = false;
                         }
-                        
+
                         Log::info('Order confirmation email sent', [
                             'order_id' => $order->id,
                             'user_email' => $user->email
                         ]);
-                        
+
                         return response()->json([
                             'success' => true,
                             'message' => 'Payment successful',
@@ -626,7 +611,7 @@ class PaymentController extends Controller
                         ]);
                     }
                 }
-                
+
                 return response()->json([
                     'status' => 'error',
                     'message' => 'Payment record not found'
@@ -636,7 +621,7 @@ class PaymentController extends Controller
                     'transaction_id' => $transactionId,
                     'response' => $responseData
                 ]);
-                
+
                 return response()->json([
                     'status' => 'error',
                     'message' => 'Payment verification failed',
@@ -645,6 +630,141 @@ class PaymentController extends Controller
             }
         } catch (\Exception $e) {
             Log::error('Payment verification failed', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+                'transaction_id' => $transactionId
+            ]);
+
+            return response()->json([
+                'status' => 'error',
+                'message' => 'An error occurred while verifying payment: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Verify a Flutterwave transaction
+     * 
+     * @param string $transactionId
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function verifyTransaction($transactionId)
+    {
+        try {
+            Log::info('Verifying Flutterwave transaction', [
+                'transaction_id' => $transactionId
+            ]);
+
+            // Get Flutterwave configuration
+            $secretKey = env('FLUTTERWAVE_SECRET_KEY');
+            
+            if (empty($secretKey)) {
+                Log::error('Flutterwave secret key not configured');
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'Payment gateway not properly configured'
+                ], 500);
+            }
+
+            // Initialize Guzzle client
+            $client = new Client();
+            
+            // Make request to Flutterwave API to verify the transaction
+            $response = $client->request('GET', 'https://api.flutterwave.com/v3/transactions/' . $transactionId . '/verify', [
+                'headers' => [
+                    'Authorization' => 'Bearer ' . trim($secretKey),
+                    'Content-Type' => 'application/json',
+                ],
+                'http_errors' => false,
+            ]);
+            
+            $statusCode = $response->getStatusCode();
+            $responseBody = $response->getBody()->getContents();
+            $responseData = json_decode($responseBody, true);
+            
+            Log::info('Flutterwave verification response', [
+                'status_code' => $statusCode,
+                'response_status' => $responseData['status'] ?? 'unknown',
+                'response_message' => $responseData['message'] ?? 'No message',
+                'has_data' => isset($responseData['data'])
+            ]);
+            
+            // Check if the verification was successful
+            if ($statusCode === 200 && isset($responseData['data']) && $responseData['status'] === 'success') {
+                // Find the payment by transaction reference
+                $payment = Payment::where('transaction_reference', $responseData['data']['tx_ref'])
+                    ->orWhere('transaction_id', $transactionId)
+                    ->first();
+                
+                if ($payment) {
+                    // Update payment status
+                    $payment->status = 'completed';
+                    $payment->transaction_id = $transactionId;
+                    $payment->payment_details = json_encode(array_merge(
+                        json_decode($payment->payment_details, true) ?? [],
+                        [
+                            'verification_response' => $responseData,
+                            'verified_at' => now()->toDateTimeString()
+                        ]
+                    ));
+                    $payment->save();
+                    
+                    // Update order status
+                    $order = Order::find($payment->order_id);
+                    if ($order) {
+                        $order->payment_status = 'paid';
+                        $order->status = 'processing';
+                        $order->save();
+                        
+                        // Send order confirmation email
+                        try {
+                            // Mail::to($order->email)->send(new OrderConfirmation($order));
+                            $emailSent = true;
+                        } catch (\Exception $e) {
+                            Log::error('Failed to send order confirmation email', [
+                                'error' => $e->getMessage(),
+                                'order_id' => $order->id
+                            ]);
+                            $emailSent = false;
+                        }
+                        
+                        return response()->json([
+                            'status' => 'success',
+                            'message' => 'Payment verified successfully',
+                            'data' => [
+                                'order_id' => $order->id,
+                                'order_number' => $order->order_number,
+                                'payment_status' => 'completed',
+                                'transaction_id' => $transactionId,
+                                'email_sent' => $emailSent ?? false
+                            ]
+                        ]);
+                    }
+                }
+                
+                // If we can't find the payment but verification was successful
+                return response()->json([
+                    'status' => 'success',
+                    'message' => 'Payment verified but no matching order found',
+                    'data' => [
+                        'transaction_id' => $transactionId,
+                        'flutterwave_data' => $responseData['data']
+                    ]
+                ]);
+            } else {
+                Log::warning('Flutterwave payment verification failed', [
+                    'transaction_id' => $transactionId,
+                    'response' => $responseData
+                ]);
+                
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'Payment verification failed: ' . ($responseData['message'] ?? 'Unknown error'),
+                    'data' => $responseData
+                ], 400);
+            }
+        } catch (\Exception $e) {
+            Log::error('Error verifying Flutterwave payment', [
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString(),
                 'transaction_id' => $transactionId
@@ -669,14 +789,14 @@ class PaymentController extends Controller
         try {
             // Find the order
             $order = Order::find($orderId);
-            
+
             if (!$order) {
                 return response()->json([
                     'status' => 'error',
                     'message' => 'Order not found'
                 ], 404);
             }
-            
+
             // Check if the order belongs to the authenticated user
             if ($order->user_id !== Auth::id()) {
                 return response()->json([
@@ -684,19 +804,19 @@ class PaymentController extends Controller
                     'message' => 'Unauthorized'
                 ], 403);
             }
-            
+
             // Get the latest payment for the order
             $payment = Payment::where('order_id', $order->id)
                 ->orderBy('created_at', 'desc')
                 ->first();
-            
+
             if (!$payment) {
                 return response()->json([
                     'status' => 'error',
                     'message' => 'No payment found for this order'
                 ], 404);
             }
-            
+
             return response()->json([
                 'status' => 'success',
                 'data' => [
@@ -717,7 +837,7 @@ class PaymentController extends Controller
                 'trace' => $e->getTraceAsString(),
                 'order_id' => $orderId
             ]);
-            
+
             return response()->json([
                 'status' => 'error',
                 'message' => 'An error occurred while getting payment status: ' . $e->getMessage()
@@ -812,18 +932,18 @@ class PaymentController extends Controller
 
             // Process the webhook event
             $payload = $request->all();
-            
+
             // Check if this is a payment event
             if (isset($payload['event']) && $payload['event'] === 'charge.completed') {
                 $data = $payload['data'];
                 $txRef = $data['tx_ref'] ?? null;
                 $status = $data['status'] ?? null;
                 $transactionId = $data['id'] ?? null;
-                
+
                 if ($txRef && $status === 'successful' && $transactionId) {
                     // Find the payment record
                     $payment = Payment::where('transaction_reference', $txRef)->first();
-                    
+
                     if ($payment) {
                         // Update payment status
                         $payment->status = 'completed';
@@ -833,7 +953,7 @@ class PaymentController extends Controller
                             'verification_time' => now()->toDateTimeString()
                         ]);
                         $payment->save();
-                        
+
                         // Update order payment status
                         $order = Order::find($payment->order_id);
                         if ($order) {
@@ -842,7 +962,7 @@ class PaymentController extends Controller
                             $order->payment_reference = $txRef;
                             $order->status = 'processing'; // Update order status to processing
                             $order->save();
-                            
+
                             try {
                                 $user = User::find($order->user_id);
                                 Log::info('Preparing to send order confirmation email', [
@@ -851,14 +971,14 @@ class PaymentController extends Controller
                                     'user_id' => $user->id,
                                     'user_email' => $user->email
                                 ]);
-                                
+
                                 NotificationService::sendOrderConfirmation($order);
-                                
+
                                 Log::info('Order confirmation email sent successfully', [
                                     'order_id' => $order->id,
                                     'user_email' => $user->email
                                 ]);
-                                
+
                                 // Set email status for frontend response
                                 $emailSent = true;
                             } catch (\Exception $e) {
@@ -867,11 +987,11 @@ class PaymentController extends Controller
                                     'error' => $e->getMessage(),
                                     'trace' => $e->getTraceAsString()
                                 ]);
-                                
+
                                 // Set email status for frontend response
                                 $emailSent = false;
                             }
-                            
+
                             Log::info('Order confirmation email sent', [
                                 'order_id' => $order->id,
                                 'user_email' => $user->email
@@ -884,7 +1004,7 @@ class PaymentController extends Controller
                     }
                 }
             }
-            
+
             // Always return a 200 response to acknowledge receipt of the webhook
             return response()->json(['status' => 'success', 'message' => 'Webhook processed']);
         } catch (\Exception $e) {
@@ -892,7 +1012,7 @@ class PaymentController extends Controller
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString()
             ]);
-            
+
             // Still return a 200 response to prevent Flutterwave from retrying
             return response()->json(['status' => 'error', 'message' => 'Error processing webhook']);
         }

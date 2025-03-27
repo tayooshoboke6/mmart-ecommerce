@@ -21,6 +21,7 @@ import MyOrders from './pages/MyOrders';
 import OrderDetail from './pages/OrderDetail';
 import Profile from './pages/Profile';
 import PaymentCallback from './pages/PaymentCallback';
+import CheckoutDebug from './pages/CheckoutDebug';
 
 // Admin pages
 import Dashboard from './pages/admin/Dashboard';
@@ -118,6 +119,11 @@ function App() {
               <Route path="/checkout" element={
                 <MainLayout>
                   <Checkout />
+                </MainLayout>
+              } />
+              <Route path="/checkout-debug" element={
+                <MainLayout>
+                  <CheckoutDebug />
                 </MainLayout>
               } />
               <Route path="/order-success" element={

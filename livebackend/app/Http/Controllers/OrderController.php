@@ -165,30 +165,49 @@ class OrderController extends Controller
             
             // Calculate shipping fee based on delivery method
             if ($request->delivery_method === 'shipping') {
-                // If shipping address and coordinates are provided
-                if ($request->has('shipping_latitude') && $request->has('shipping_longitude')) {
+                // If shipping fee is already provided in the request, use it
+                if ($request->has('shipping_fee')) {
+                    $shippingAmount = (float) $request->shipping_fee;
+                    \Log::info('Using shipping fee from request', ['shipping_fee' => $shippingAmount]);
+                }
+                // Otherwise calculate it based on coordinates if available
+                else if ($request->has('shipping_latitude') && $request->has('shipping_longitude')) {
                     $customerLocation = [
                         $request->shipping_latitude,
                         $request->shipping_longitude
                     ];
                     
-                    $deliveryDetails = $this->deliveryFeeService->calculateDeliveryFee(
-                        $totalAmount,
-                        $customerLocation,
-                        $request->store_id
-                    );
-                    
-                    // Only apply fee if delivery is available
-                    if ($deliveryDetails['isDeliveryAvailable']) {
-                        $shippingAmount = $deliveryDetails['fee'];
-                    } else {
-                        return response()->json([
-                            'status' => 'error',
-                            'message' => $deliveryDetails['message']
-                        ], 422);
+                    try {
+                        $deliveryDetails = $this->deliveryFeeService->calculateDeliveryFee(
+                            $totalAmount,
+                            $customerLocation,
+                            $request->store_id
+                        );
+                        
+                        // Only apply fee if delivery is available
+                        if ($deliveryDetails['isDeliveryAvailable']) {
+                            $shippingAmount = $deliveryDetails['fee'];
+                        } else {
+                            // Log the issue but continue with default fee instead of returning error
+                            \Log::warning('Delivery not available for location, using default fee', [
+                                'message' => $deliveryDetails['message'],
+                                'customer_location' => $customerLocation,
+                                'store_id' => $request->store_id
+                            ]);
+                            $shippingAmount = 500; // Default ₦500
+                        }
+                    } catch (\Exception $e) {
+                        \Log::error('Error calculating delivery fee', [
+                            'error' => $e->getMessage(),
+                            'location' => $customerLocation,
+                            'store_id' => $request->store_id
+                        ]);
+                        // Use default fee instead of failing
+                        $shippingAmount = 500; // Default ₦500
                     }
                 } else {
                     // Fallback to default shipping fee if coordinates not provided
+                    \Log::info('No coordinates provided for delivery fee calculation, using default fee');
                     $shippingAmount = 500; // Default ₦500
                 }
             }
@@ -197,7 +216,13 @@ class OrderController extends Controller
             $discountAmount = 0;
             $couponId = null;
             
-            if ($request->has('coupon_code')) {
+            // If discount is already provided in the request, use it
+            if ($request->has('discount')) {
+                $discountAmount = (float) $request->discount;
+                \Log::info('Using discount from request', ['discount' => $discountAmount]);
+            }
+            // Otherwise calculate it based on coupon code if available
+            else if ($request->has('coupon_code')) {
                 $coupon = Coupon::where('code', $request->coupon_code)->first();
                 
                 if ($coupon && $coupon->isValid($totalAmount, $user->id)) {

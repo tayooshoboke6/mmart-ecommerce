@@ -96,7 +96,7 @@ class DeliveryFeeService
             $globalSettings = $this->getGlobalSettings();
             
             // Get store delivery settings
-            $baseFee = $store->delivery_base_fee ?? $globalSettings['base_fee'] ?? 500; // Default: ₦500 base fee
+            $baseFee = $store->delivery_base_fee ?? $globalSettings['base_fee'] ?? 0; // No default fee
             $feePerKm = $store->delivery_fee_per_km ?? $globalSettings['fee_per_km'] ?? 100; // Default: ₦100 per km
             $freeThreshold = $store->free_delivery_threshold ?? $globalSettings['free_threshold'] ?? 10000; // Default: Free for orders over ₦10,000
             $minOrder = $store->minimum_order_value ?? $globalSettings['min_order'] ?? 0; // Default: No minimum order
@@ -215,7 +215,7 @@ class DeliveryFeeService
         try {
             Log::info('DeliveryFeeService: Using default global settings (delivery_settings table not found)');
             return [
-                'base_fee' => 500,           // Default: ₦500 base fee
+                'base_fee' => 0,           // No default fee
                 'fee_per_km' => 100,         // Default: ₦100 per km
                 'free_threshold' => 10000,   // Default: Free for orders over ₦10,000
                 'min_order' => 0,            // Default: No minimum order
@@ -224,7 +224,7 @@ class DeliveryFeeService
         } catch (\Exception $e) {
             Log::error('Error getting global settings: ' . $e->getMessage());
             return [
-                'base_fee' => 500,
+                'base_fee' => 0,
                 'fee_per_km' => 100,
                 'free_threshold' => 10000,
                 'min_order' => 0,

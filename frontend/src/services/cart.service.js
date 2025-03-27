@@ -27,7 +27,7 @@ const CartService = {
   // Update cart item quantity
   updateCartItem: async (itemId, quantity) => {
     try {
-      const response = await api.put(`/cart/update/${itemId}`, { quantity });
+      const response = await api.post(`/cart/update/${itemId}`, { quantity });
       return response.data;
     } catch (error) {
       throw error.response ? error.response.data : error;
@@ -53,6 +53,16 @@ const CartService = {
       throw error.response ? error.response.data : error;
     }
   },
+  
+  // Sync cart with backend
+  syncCart: async (items) => {
+    try {
+      const response = await api.post('/cart/sync', { items });
+      return response.data;
+    } catch (error) {
+      throw error.response ? error.response.data : error;
+    }
+  }
 };
 
 export default CartService;

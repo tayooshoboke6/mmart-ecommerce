@@ -51,17 +51,19 @@ const AddressSelector = ({ onAddressSelect, selectedAddressId }) => {
   useEffect(() => {
     if (selectedAddressId) {
       const address = addresses.find(a => a.id === selectedAddressId);
-      setFormData({
-        name: address.name || '',
-        street: address.street || '',
-        city: address.city || '',
-        state: address.state || '',
-        phone: address.phone || '',
-        postalCode: address.postalCode || '',
-        latitude: address.latitude || '',
-        longitude: address.longitude || '',
-        country: address.country || 'Nigeria'
-      });
+      if (address) {
+        setFormData({
+          name: address.name || '',
+          street: address.street || '',
+          city: address.city || '',
+          state: address.state || '',
+          phone: address.phone || '',
+          postalCode: address.postalCode || '',
+          latitude: address.latitude || '',
+          longitude: address.longitude || '',
+          country: address.country || 'Nigeria'
+        });
+      }
     }
   }, [selectedAddressId, addresses]);
 

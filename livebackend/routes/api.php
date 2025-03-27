@@ -11,6 +11,7 @@ use App\Http\Controllers\CartController;
 use App\Http\Controllers\LocationController;
 use App\Http\Controllers\CouponController;
 use App\Http\Controllers\PaymentController;
+use App\Http\Controllers\DebugController;
 use App\Http\Controllers\Admin\CategoryAdminController;
 use App\Http\Controllers\Admin\ProductSectionController;
 use App\Http\Controllers\Admin\BannerController;
@@ -178,16 +179,16 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::patch('/users/{userId}/addresses/{addressId}/default', [AddressController::class, 'setDefault']);
     Route::patch('/users/{userId}/addresses/{addressId}/coordinates', [AddressController::class, 'updateCoordinates']);
     
-    // Cart
-    Route::get('/cart', [CartController::class, 'index']);
-    Route::post('/cart/add', [CartController::class, 'addItem']);
-    Route::put('/cart/update/{item}', [CartController::class, 'updateItem']);
-    Route::delete('/cart/remove/{item}', [CartController::class, 'removeItem']);
-    Route::delete('/cart/clear', [CartController::class, 'clearCart']);
-    
-    // User Cart (for frontend persistence) - disabled as we now use localStorage
-    // Route::get('/user/cart', [CartController::class, 'getUserCart']);
-    // Route::post('/user/cart', [CartController::class, 'saveUserCart']);
+    // Cart routes
+    Route::middleware('auth:sanctum')->group(function () {
+        Route::get('/cart', [CartController::class, 'index']);
+        Route::get('/cart/count', [CartController::class, 'count']);
+        Route::post('/cart/add', [CartController::class, 'addItem']);
+        Route::post('/cart/update/{id}', [CartController::class, 'updateItem']);
+        Route::delete('/cart/remove/{id}', [CartController::class, 'removeItem']);
+        Route::delete('/cart/clear', [CartController::class, 'clearCart']);
+        Route::post('/cart/sync', [CartController::class, 'sync']);
+    });
     
     // Checkout & Orders
     Route::post('/orders', [OrderController::class, 'store']);
@@ -195,12 +196,20 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/orders/{order}', [OrderController::class, 'show']);
     Route::post('/orders/{order}/cancel', [OrderController::class, 'cancel']);
     
+    // Debug routes
+    Route::prefix('debug')->group(function () {
+        Route::get('/env-variables', [DebugController::class, 'getEnvVariables']);
+        Route::post('/test-flutterwave', [DebugController::class, 'testFlutterwaveAPI']);
+        Route::get('/payment-details/{orderId}', [DebugController::class, 'getPaymentDetails']);
+    });
+    
     // Payments
     Route::get('/payments/methods', [PaymentController::class, 'getPaymentMethods']);
     Route::post('/payments/process', [PaymentController::class, 'processPayment']);
     Route::post('/orders/{order}/payment', [PaymentController::class, 'processPayment']);
     Route::get('/payments/{payment}/verify', [PaymentController::class, 'verifyPayment']);
-    
+    Route::get('/payments/flutterwave/verify/{transactionId}', [PaymentController::class, 'verifyTransaction']);
+
     // Store pickup details (only after payment)
     Route::get('/orders/{order}/pickup-details', [OrderController::class, 'pickupDetails']);
 });

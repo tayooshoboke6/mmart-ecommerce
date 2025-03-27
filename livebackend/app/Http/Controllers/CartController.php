@@ -9,6 +9,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 
 class CartController extends Controller
 {
@@ -294,6 +295,87 @@ class CartController extends Controller
             return response()->json([
                 'status' => 'error',
                 'message' => 'Error saving cart data',
+            ], 500);
+        }
+    }
+    
+    /**
+     * Synchronize cart items from frontend to backend.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @return \Illuminate\Http\Response
+     */
+    public function sync(Request $request)
+    {
+        try {
+            $user = $request->user();
+            $items = $request->input('items', []);
+            
+            Log::info('Syncing cart items for user', [
+                'user_id' => $user->id,
+                'item_count' => count($items)
+            ]);
+            
+            // Begin transaction to ensure data consistency
+            DB::beginTransaction();
+            
+            // Clear existing cart items
+            $user->cartItems()->delete();
+            
+            // Add new cart items from the frontend
+            foreach ($items as $item) {
+                // Validate required fields
+                if (empty($item['product_id']) || empty($item['quantity'])) {
+                    continue;
+                }
+                
+                // Check if product exists
+                $product = Product::find($item['product_id']);
+                if (!$product) {
+                    Log::warning('Product not found during cart sync', [
+                        'product_id' => $item['product_id']
+                    ]);
+                    continue;
+                }
+                
+                // Get measurement if provided
+                $measurement = null;
+                if (!empty($item['measurement_id'])) {
+                    $measurement = ProductMeasurement::find($item['measurement_id']);
+                }
+                
+                // Create cart item
+                CartItem::create([
+                    'user_id' => $user->id,
+                    'product_id' => $item['product_id'],
+                    'quantity' => $item['quantity'],
+                    'product_measurement_id' => $measurement ? $measurement->id : null
+                ]);
+            }
+            
+            // Commit transaction
+            DB::commit();
+            
+            // Get updated cart items
+            $cartItems = $user->cartItems()->with(['product', 'measurement'])->get();
+            
+            return response()->json([
+                'status' => 'success',
+                'message' => 'Cart synchronized successfully',
+                'cart_items' => $cartItems
+            ]);
+        } catch (\Exception $e) {
+            // Rollback transaction on error
+            DB::rollBack();
+            
+            Log::error('Error syncing cart items', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Failed to sync cart items: ' . $e->getMessage()
             ], 500);
         }
     }

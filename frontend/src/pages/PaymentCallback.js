@@ -56,7 +56,7 @@ const PaymentCallback = () => {
           
           console.log('Payment verification response:', verificationResponse);
           
-          if (verificationResponse && verificationResponse.success) {
+          if (verificationResponse && (verificationResponse.success || verificationResponse.status === 'success')) {
             // Check if order confirmation email was sent
             if (verificationResponse.data && verificationResponse.data.email_sent !== undefined) {
               if (verificationResponse.data.email_sent) {

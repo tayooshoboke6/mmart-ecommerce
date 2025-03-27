@@ -48,8 +48,13 @@ class DeliveryService {
         if (response.data.data.message && response.data.data.message.includes("don't currently deliver")) {
           console.log('DeliveryService: Overriding delivery availability for testing');
           response.data.data.isDeliveryAvailable = true;
-          response.data.data.fee = 2000; // Base fee
-          response.data.data.message = "Delivery fee: ₦2,000";
+          response.data.data.message = "Delivery available";
+        }
+        
+        // Remove kilometer information from the message
+        if (response.data.data.message && response.data.data.message.includes('km)')) {
+          console.log('DeliveryService: Removing distance information from message');
+          response.data.data.message = response.data.data.message.replace(/\(\d+\.?\d* km\)/g, '');
         }
         
         return {

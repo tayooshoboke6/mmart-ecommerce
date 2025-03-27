@@ -82,6 +82,7 @@ export const initializeFlutterwavePayment = async (paymentData) => {
       amount: testAmount, // Use test amount for test mode
       redirect_url: paymentData.redirect_url || `${window.location.origin}/payment/callback`,
       tx_ref: paymentData.meta?.order_reference || generatePaymentReference(),
+      order_id: paymentData.meta?.order_id, // Include the order ID for the backend
       customer: {
         email: paymentData.email,
         phone_number: paymentData.phone,

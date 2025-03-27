@@ -361,8 +361,18 @@ const Home = () => {
         } catch (apiError) {
           console.log('API call for categories failed:', apiError);
         }
+        
         // Combine real and mock categories - real categories first
-        setCategories([...realCategories, ...mockCategories]);
+        const uniqueCategories = [...realCategories];
+        
+        // Only add mock categories that don't have ID conflicts with real categories
+        mockCategories.forEach(mockCategory => {
+          if (!uniqueCategories.some(cat => cat.id === mockCategory.id)) {
+            uniqueCategories.push(mockCategory);
+          }
+        });
+        
+        setCategories(uniqueCategories);
 
         setLoading(false);
 } catch (error) {

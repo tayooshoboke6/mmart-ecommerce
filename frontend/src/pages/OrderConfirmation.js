@@ -47,6 +47,20 @@ const OrderConfirmation = () => {
       
       console.log('Processed order data:', orderData);
       
+      // Add detailed logging for discount and shipping values
+      console.log('Order discount values:', {
+        discount: orderData.discount,
+        discount_amount: orderData.discount_amount,
+        coupon: orderData.coupon,
+        coupon_id: orderData.coupon_id
+      });
+      
+      console.log('Order shipping values:', {
+        shipping_fee: orderData.shipping_fee,
+        shipping: orderData.shipping,
+        delivery_method: orderData.delivery_method
+      });
+      
       // Clear the localStorage after successful retrieval
       localStorage.removeItem('last_order_id');
       
@@ -265,19 +279,27 @@ const OrderConfirmation = () => {
                     <span className="text-gray-600">Shipping:</span>
                     <span className="font-medium">{formatNaira(order.shipping_fee || order.shipping || 0)}</span>
                   </div>
-                  {(order.discount > 0) && (
-                    <div className="flex justify-between py-2">
-                      <span className="text-gray-600">Discount:</span>
-                      <span className="font-medium text-green-600">-{formatNaira(order.discount)}</span>
-                    </div>
-                  )}
+                  <div className="flex justify-between py-2">
+                    <span className="text-gray-600">Discount:</span>
+                    <span className="font-medium text-green-600">-{formatNaira(order.discount || order.discount_amount || 0)}</span>
+                  </div>
                   <div className="flex justify-between py-2">
                     <span className="text-gray-600">Tax:</span>
                     <span className="font-medium">{formatNaira(order.tax || 0)}</span>
                   </div>
                   <div className="flex justify-between py-2 border-t border-gray-200 mt-2 pt-2">
                     <span className="text-lg font-bold">Total:</span>
-                    <span className="text-lg font-bold">{formatNaira(order.grand_total || order.total || order.grandTotal || 0)}</span>
+                    <span className="text-lg font-bold">
+                      {formatNaira(
+                        order.grand_total || 
+                        order.total || 
+                        order.grandTotal || 
+                        ((order.subtotal || order.sub_total || 0) + 
+                         (order.shipping_fee || order.shipping || 0) + 
+                         (order.tax || 0) - 
+                         (order.discount || order.discount_amount || 0))
+                      )}
+                    </span>
                   </div>
                 </div>
               </div>
