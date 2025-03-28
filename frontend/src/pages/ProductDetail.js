@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams, Link, useLocation } from 'react-router-dom';
 import { useCart } from '../context/CartContext';
+import { useNotification } from '../context/NotificationContext';
 import ProductService from '../services/product.service';
 import Button from '../components/ui/Button';
 import { formatNaira } from '../utils/formatters';
@@ -76,6 +77,7 @@ const RelatedProductsGrid = styled.div`
 const ProductDetail = () => {
   const { slug } = useParams();
   const { addToCart, loading: cartLoading } = useCart();
+  const { showSuccess, showError } = useNotification();
   const location = useLocation();
   
   const [product, setProduct] = useState(null);
@@ -85,6 +87,8 @@ const ProductDetail = () => {
   const [quantity, setQuantity] = useState(1);
   const [activeImage, setActiveImage] = useState(0);
   const [activeTab, setActiveTab] = useState('description');
+  const [addingToCart, setAddingToCart] = useState(false);
+  const timeoutRef = useRef(null);
   
   // Fetch product details
   useEffect(() => {
@@ -219,7 +223,7 @@ const ProductDetail = () => {
           };
           
           setProduct(dummyProduct);
-    }
+        }
         
         // Generate dummy related products
         const dummyRelatedProducts = Array(4).fill().map((_, index) => ({
@@ -268,14 +272,56 @@ const ProductDetail = () => {
     }
   };
   
-  // Handle add to cart
+  // Handle add to cart with background syncing
   const handleAddToCart = () => {
-    if (product) {
-      console.log('Adding product to cart:', product);
-      console.log('Quantity:', quantity);
-      addToCart(product, quantity);
+    if (!product) {
+      return;
     }
+    
+    // Client-side validation
+    if (product.stock_quantity <= 0 || product.is_in_stock === false) {
+      showError('Sorry, this product is out of stock');
+      return;
+    }
+    
+    // Prevent multiple clicks
+    if (addingToCart) {
+      return;
+    }
+    
+    // Set adding to cart state
+    setAddingToCart(true);
+    
+    // Show success notification immediately
+    showSuccess(`${product.name} added to cart!`);
+    
+    // The addToCart function now handles the delay internally
+    // We just need to handle success/failure here
+    addToCart(product, quantity)
+      .then(() => {
+        console.log('Product successfully added to cart');
+      })
+      .catch((error) => {
+        console.error('Error adding to cart:', error);
+        showError(error.response?.data?.message || error.message || 'Failed to add to cart');
+      })
+      .finally(() => {
+        // Reset state after a delay for better UX
+        // This is independent of the API call timing
+        timeoutRef.current = setTimeout(() => {
+          setAddingToCart(false);
+        }, 1000);
+      });
   };
+  
+  // Cleanup timeouts on unmount
+  useEffect(() => {
+    return () => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
+    };
+  }, []);
   
   // Render loading state
   if (loading) {
@@ -492,11 +538,15 @@ const ProductDetail = () => {
                 <Button
                   variant="primary"
                   fullWidth
-                  disabled={product.stock_quantity === 0 || cartLoading}
-                  loading={cartLoading}
+                  disabled={product.stock_quantity === 0 || addingToCart}
                   onClick={handleAddToCart}
+                  className={addingToCart ? 'bg-green-500 hover:bg-green-600' : ''}
                 >
-                  {product.stock_quantity === 0 ? 'Out of Stock' : 'Add to Cart'}
+                  {product.stock_quantity === 0 
+                    ? 'Out of Stock' 
+                    : addingToCart 
+                      ? 'Added to Cart!' 
+                      : 'Add to Cart'}
                 </Button>
                 
                 <Button

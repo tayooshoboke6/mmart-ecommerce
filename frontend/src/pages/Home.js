@@ -7,6 +7,7 @@ import Slider from 'react-slick';
 import 'slick-carousel/slick/slick.css';
 import 'slick-carousel/slick/slick-theme.css';
 import { useCart } from '../context/CartContext';
+import { getCachedData, prefetchData } from '../utils/prefetch';
 
 const Home = () => {
   const [featuredProducts, setFeaturedProducts] = useState([]);
@@ -17,120 +18,108 @@ const Home = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const { addToCart } = useCart();
+  
+  // Track which products have been added to cart for button state
+  const [addedProducts, setAddedProducts] = useState({});
+  const [errorProducts, setErrorProducts] = useState({});
+  const [errorMessages, setErrorMessages] = useState({});
+
+  // Function to validate product data before displaying
+  const validateProduct = (product) => {
+    if (!product || typeof product !== 'object') return false;
+    if (!product.id || !product.name) return false;
+    
+    // Ensure required properties exist
+    const requiredProps = ['slug', 'base_price'];
+    for (const prop of requiredProps) {
+      if (product[prop] === undefined) return false;
+    }
+    
+    // Validate prices are numeric
+    if (isNaN(parseFloat(product.base_price))) return false;
+    if (product.sale_price && isNaN(parseFloat(product.sale_price))) return false;
+    
+    // Ensure image_url is a string if it exists
+    if (product.image_url && typeof product.image_url !== 'string') return false;
+    
+    return true;
+  };
 
   useEffect(() => {
     const fetchHomeData = async () => {
-      setLoading(true);
       try {
+        setLoading(true);
         
-        const mockFeaturedProducts = [
-          {
-            id: 1,
-            name: 'Premium Rice (5kg)',
-            slug: 'premium-rice-5kg',
-            description: 'High-quality Nigerian rice, perfect for all your meals.',
-            base_price: "5000.00",
-            sale_price: "4500.00",
-            is_featured: true,
-            is_active: true,
-            stock_quantity: 50,
-            image_url: 'https://images.unsplash.com/photo-1586201375761-83865001e8ac?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1470&q=80',
-            is_on_sale: true,
-            is_in_stock: true,
-            discount_percentage: 10
-          },
-          {
-            id: 2,
-            name: 'Smartphone X Pro',
-            slug: 'smartphone-x-pro',
-            description: 'Latest smartphone with advanced features and long battery life.',
-            base_price: "150000.00",
-            sale_price: "150000.00",
-            is_featured: true,
-            is_active: true,
-            stock_quantity: 10,
-            image_url: 'https://images.unsplash.com/photo-1598327105666-5b89351aff97?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1527&q=80',
-            is_on_sale: false,
-            is_in_stock: true,
-            discount_percentage: 0
-          },
-          {
-            id: 3,
-            name: 'Men\'s Casual Shirt',
-            slug: 'mens-casual-shirt',
-            description: 'Comfortable and stylish shirt for everyday wear.',
-            base_price: "7500.00",
-            sale_price: "6000.00",
-            is_featured: true,
-            is_active: true,
-            stock_quantity: 25,
-            image_url: 'https://images.unsplash.com/photo-1596755094514-f87e34085b2c?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1476&q=80',
-            is_on_sale: true,
-            is_in_stock: true,
-            discount_percentage: 20
-          },
-          {
-            id: 4,
-            name: 'Kitchen Blender',
-            slug: 'kitchen-blender',
-            description: 'Powerful blender for all your kitchen needs.',
-            base_price: "15000.00",
-            sale_price: "12000.00",
-            is_featured: true,
-            is_active: true,
-            stock_quantity: 15,
-            image_url: 'https://images.unsplash.com/photo-1619067562766-8e6fa33886e3?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1470&q=80',
-            is_on_sale: true,
-            is_in_stock: true,
-            discount_percentage: 20
-          },
-          {
-            id: 5,
-            name: "Premium Washing Soap",
-            slug: "premium-washing-soap",
-            image_url: "https://images.unsplash.com/photo-1626396805646-4e9b8ba48fcf?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1470&q=80",
-            base_price: 3999,
-            sale_price: 2999,
-            discount_percentage: 25,
-            rating: 4.5,
-            review_count: 120,
-            is_featured: true
-          },
-          {
-            id: 6,
-            name: "Luxury Hand Cream",
-            slug: "luxury-hand-cream",
-            image_url: "https://images.unsplash.com/photo-1611080626919-7cf5a9dbab12?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1470&q=80",
-            base_price: 4500,
-            sale_price: 4500,
-            discount_percentage: 0,
-            rating: 4.8,
-            review_count: 85,
-            is_featured: true
-          }
-        ];
+        // Try to get data from cache first
+        let featuredData = [];
+        let newArrivalsData = [];
+        let bestSellersData = [];
+        let hotDealsData = [];
+        let categoriesData = [];
         
-        let realFeaturedProducts = [];
         try {
-          const response = await ProductService.getProductsByType('featured');
+          // Use cached data with fallback to API
+          featuredData = await getCachedData('/products/featured');
+          
+          // Prefetch other common pages while we're here
+          // This happens in the background and doesn't block rendering
+          prefetchData('/products?page=1');
+          prefetchData('/categories');
+          
+          // For popular products, prefetch their detail pages
+          if (featuredData && featuredData.length) {
+            // Prefetch the first 3 featured products' details
+            featuredData.slice(0, 3).forEach(product => {
+              if (product && product.slug) {
+                prefetchData(`/products/${product.slug}`);
+              }
+            });
+          }
+        } catch (error) {
+          console.error('Error fetching cached data:', error);
+          // If cache fails, we'll fetch directly below
+        }
+        
+        // If we don't have cached data, fetch directly
+        if (!featuredData || !featuredData.length) {
+          const featuredResponse = await ProductService.getProductsByType('featured');
+          featuredData = featuredResponse.products;
+        }
+        
+        // Continue with other API calls
+        let realNewArrivals = [];
+        try {
+          const response = await ProductService.getProductsByType('new_arrivals');
+          
+          // Validate API response structure
+          if (!response || typeof response !== 'object') {
+            console.error('Invalid API response format for new arrivals');
+            throw new Error('Invalid API response format');
+          }
+          
+          // Check if products array exists and is an array
+          if (!Array.isArray(response.products)) {
+            console.error('Products data is not an array for new arrivals');
+            throw new Error('Invalid products data format');
+          }
+          
           // Map API response fields to match component expectations
-          realFeaturedProducts = (response.products || []).map(product => ({
+          realNewArrivals = (response.products || []).map(product => ({
             ...product,
             is_featured: product.is_featured || false,
-            is_new_arrival: product.is_new_arrival || false,
+            is_new_arrival: product.is_new_arrival || true, // Force true for new arrivals
             is_hot_deal: product.is_hot_deal || false,
+            is_active: product.is_active || true,
             is_in_stock: product.is_in_stock || (product.stock_quantity > 0),
             is_on_sale: product.is_on_sale || (product.sale_price && product.base_price && parseFloat(product.sale_price) < parseFloat(product.base_price)),
             discount_percentage: product.discount_percentage || (product.base_price && product.sale_price ? 
               Math.round(((parseFloat(product.base_price) - parseFloat(product.sale_price)) / parseFloat(product.base_price)) * 100) : 0)
           }));
-          console.log('Fetched real featured products:', realFeaturedProducts);
+          console.log('Fetched real new arrivals:', realNewArrivals);
         } catch (apiError) {
-          console.log('API call for featured products failed:', apiError);
+          console.error('API call for new arrivals failed:', apiError);
         }
-        // Combine real and mock products - real products first
-        setFeaturedProducts([...realFeaturedProducts, ...mockFeaturedProducts]);
-
+        
         // Mock new arrivals
         const mockNewArrivals = [
           {
@@ -183,28 +172,43 @@ const Home = () => {
           }
         ];
         
-        let realNewArrivals = [];
+        // Combine real and mock products - real products first, filter out invalid products
+        const validRealNewArrivals = realNewArrivals.filter(validateProduct);
+        const validMockNewArrivals = mockNewArrivals.filter(validateProduct);
+        newArrivalsData = [...validRealNewArrivals, ...validMockNewArrivals];
+
+        let realBestSellers = [];
         try {
-          const response = await ProductService.getProductsByType('new_arrivals');
+          const response = await ProductService.getProductsByType('best_sellers');
+          
+          // Validate API response structure
+          if (!response || typeof response !== 'object') {
+            console.error('Invalid API response format for best sellers');
+            throw new Error('Invalid API response format');
+          }
+          
+          // Check if products array exists and is an array
+          if (!Array.isArray(response.products)) {
+            console.error('Products data is not an array for best sellers');
+            throw new Error('Invalid products data format');
+          }
+          
           // Map API response fields to match component expectations
-          realNewArrivals = (response.products || []).map(product => ({
+          realBestSellers = (response.products || []).map(product => ({
             ...product,
             is_featured: product.is_featured || false,
-            is_new_arrival: product.is_new_arrival || true, // Force true for new arrivals
+            is_new_arrival: product.is_new_arrival || false,
             is_hot_deal: product.is_hot_deal || false,
-            is_active: product.is_active || true,
             is_in_stock: product.is_in_stock || (product.stock_quantity > 0),
             is_on_sale: product.is_on_sale || (product.sale_price && product.base_price && parseFloat(product.sale_price) < parseFloat(product.base_price)),
             discount_percentage: product.discount_percentage || (product.base_price && product.sale_price ? 
               Math.round(((parseFloat(product.base_price) - parseFloat(product.sale_price)) / parseFloat(product.base_price)) * 100) : 0)
           }));
-          console.log('Fetched real new arrivals:', realNewArrivals);
+          console.log('Fetched real best sellers:', realBestSellers);
         } catch (apiError) {
-          console.log('API call for new arrivals failed:', apiError);
+          console.error('API call for best sellers failed:', apiError);
         }
-        // Combine real and mock products - real products first
-        setNewArrivals([...realNewArrivals, ...mockNewArrivals]);
-
+        
         // Mock best sellers
         const mockBestSellers = [
           {
@@ -253,31 +257,28 @@ const Home = () => {
           }
         ];
         
-        let realBestSellers = [];
-        try {
-          const response = await ProductService.getProductsByType('best_sellers');
-          // Map API response fields to match component expectations
-          realBestSellers = (response.products || []).map(product => ({
-            ...product,
-            is_featured: product.is_featured || false,
-            is_new_arrival: product.is_new_arrival || false,
-            is_hot_deal: product.is_hot_deal || false,
-            is_in_stock: product.is_in_stock || (product.stock_quantity > 0),
-            is_on_sale: product.is_on_sale || (product.sale_price && product.base_price && parseFloat(product.sale_price) < parseFloat(product.base_price)),
-            discount_percentage: product.discount_percentage || (product.base_price && product.sale_price ? 
-              Math.round(((parseFloat(product.base_price) - parseFloat(product.sale_price)) / parseFloat(product.base_price)) * 100) : 0)
-          }));
-          console.log('Fetched real best sellers:', realBestSellers);
-        } catch (apiError) {
-          console.log('API call for best sellers failed:', apiError);
-        }
-        // Combine real and mock products - real products first
-        setBestSellers([...realBestSellers, ...mockBestSellers]);
+        // Combine real and mock products - real products first, filter out invalid products
+        const validRealBestSellers = realBestSellers.filter(validateProduct);
+        const validMockBestSellers = mockBestSellers.filter(validateProduct);
+        bestSellersData = [...validRealBestSellers, ...validMockBestSellers];
 
         // Fetch hot deals
         let realHotDeals = [];
         try {
           const response = await ProductService.getProductsByType('hot_deals');
+          
+          // Validate API response structure
+          if (!response || typeof response !== 'object') {
+            console.error('Invalid API response format for hot deals');
+            throw new Error('Invalid API response format');
+          }
+          
+          // Check if products array exists and is an array
+          if (!Array.isArray(response.products)) {
+            console.error('Products data is not an array for hot deals');
+            throw new Error('Invalid products data format');
+          }
+          
           // Map API response fields to match component expectations
           realHotDeals = (response.products || []).map(product => {
             // Calculate discount percentage if not provided
@@ -300,12 +301,13 @@ const Home = () => {
           });
           console.log('Fetched real hot deals:', realHotDeals);
         } catch (apiError) {
-          console.log('API call for hot deals failed:', apiError);
+          console.error('API call for hot deals failed:', apiError);
         }
         
-        // Use the mock data for hot deals if the API call fails or returns empty
-        const mockHotDeals = mockBestSellers.filter(product => product.discount_percentage > 0);
-        setHotDeals(realHotDeals.length > 0 ? realHotDeals : mockHotDeals);
+        // Use the mock data for hot deals if the API call fails or returns empty, filter out invalid products
+        const validRealHotDeals = realHotDeals.filter(validateProduct);
+        const validMockHotDeals = mockBestSellers.filter(product => product.discount_percentage > 0).filter(validateProduct);
+        hotDealsData = validRealHotDeals.length > 0 ? validRealHotDeals : validMockHotDeals;
 
         // Mock categories
         const mockCategories = [
@@ -356,10 +358,23 @@ const Home = () => {
         let realCategories = [];
         try {
           const response = await ProductService.getCategories();
+          
+          // Validate API response structure
+          if (!response || typeof response !== 'object') {
+            console.error('Invalid API response format for categories');
+            throw new Error('Invalid API response format');
+          }
+          
+          // Check if categories array exists and is an array
+          if (!Array.isArray(response.categories)) {
+            console.error('Categories data is not an array');
+            throw new Error('Invalid categories data format');
+          }
+          
           realCategories = response.categories || [];
           console.log('Fetched real categories:', realCategories);
         } catch (apiError) {
-          console.log('API call for categories failed:', apiError);
+          console.error('API call for categories failed:', apiError);
         }
         
         // Combine real and mock categories - real categories first
@@ -372,18 +387,103 @@ const Home = () => {
           }
         });
         
-        setCategories(uniqueCategories);
+        categoriesData = uniqueCategories;
 
+        // Filter out invalid products
+        setFeaturedProducts(featuredData.filter(validateProduct));
+        setNewArrivals(newArrivalsData.filter(validateProduct));
+        setBestSellers(bestSellersData.filter(validateProduct));
+        setHotDeals(hotDealsData.filter(validateProduct));
+        setCategories(categoriesData);
+        
+      } catch (err) {
+        console.error('Error fetching home data:', err);
+        setError(err.message || 'Failed to load products');
+      } finally {
         setLoading(false);
-} catch (error) {
-  console.error("Error fetching home data:", error);
-  setError(error);
-  setLoading(false);
-}
+      }
     };
 
     fetchHomeData();
   }, []);
+  
+  // Function to handle adding product to cart with visual feedback
+  const handleAddToCart = async (product, quantity) => {
+    try {
+      // Client-side validation before making API call
+      if (!product || !product.id) {
+        throw new Error('Invalid product');
+      }
+
+      // Validate product is in stock
+      if (product.stock_quantity <= 0 || product.is_in_stock === false) {
+        throw new Error('Product is out of stock');
+      }
+
+      // Validate quantity
+      if (!quantity || quantity <= 0 || !Number.isInteger(quantity)) {
+        quantity = 1; // Default to 1 if invalid quantity
+      }
+
+      // Validate maximum quantity (don't allow adding more than available stock)
+      if (quantity > product.stock_quantity) {
+        throw new Error(`Only ${product.stock_quantity} items available`);
+      }
+
+      // Clear any previous error state for this product
+      if (errorProducts[product.id]) {
+        setErrorProducts(prev => ({
+          ...prev,
+          [product.id]: false
+        }));
+        setErrorMessages(prev => ({
+          ...prev,
+          [product.id]: ''
+        }));
+      }
+      
+      await addToCart(product, quantity);
+      
+      // Set added state for visual feedback
+      setAddedProducts(prev => ({
+        ...prev,
+        [product.id]: true
+      }));
+      
+      // Reset after 1.5 seconds
+      setTimeout(() => {
+        setAddedProducts(prev => ({
+          ...prev,
+          [product.id]: false
+        }));
+      }, 1500);
+    } catch (error) {
+      console.error('Error adding to cart:', error);
+      
+      // Extract error message
+      const message = error.message || 'Error adding to cart';
+      
+      // Set error state for visual feedback
+      setErrorProducts(prev => ({
+        ...prev,
+        [product.id]: true
+      }));
+      
+      // Store the error message
+      setErrorMessages(prev => ({
+        ...prev,
+        [product.id]: message
+      }));
+      
+      // Reset after 2 seconds
+      setTimeout(() => {
+        setErrorProducts(prev => ({
+          ...prev,
+          [product.id]: false
+        }));
+      }, 2000);
+    }
+  };
 
   if (loading) {
     return (
@@ -496,7 +596,7 @@ const Home = () => {
                         </div>
                       </div>
                       <img 
-                        src="https://images.unsplash.com/photo-1593642632823-8f785ba67e45?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1932&q=80" 
+                        src="https://images.unsplash.com/photo-1593642632823-76b7b1e5a7a5?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1932&q=80" 
                         alt="Latest Electronics" 
                         className="w-full h-full object-cover"
                       />
@@ -774,14 +874,20 @@ const Home = () => {
                         />
                         <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-5 transition-all duration-300"></div>
                         <button 
-                          className="absolute bottom-0 left-0 right-0 bg-[#3B82F6] text-white py-2 translate-y-full group-hover:translate-y-0 transition-transform duration-300 text-sm font-medium"
+                          className={`absolute bottom-0 left-0 right-0 py-2 transition-all duration-300 text-sm font-medium ${
+                            addedProducts[product.id] 
+                              ? 'bg-green-500 text-white translate-y-0' 
+                              : errorProducts[product.id]
+                                ? 'bg-red-500 text-white translate-y-0'
+                                : 'bg-[#3B82F6] text-white translate-y-full group-hover:translate-y-0'
+                          }`}
                           onClick={(e) => {
                             e.preventDefault();
                             e.stopPropagation();
-                            addToCart(product, 1);
+                            handleAddToCart(product, 1);
                           }}
                         >
-                          Add to Cart
+                          {addedProducts[product.id] ? 'Added!' : errorProducts[product.id] ? (errorMessages[product.id] && errorMessages[product.id].toLowerCase().includes('stock') ? 'Out of Stock' : 'Error!') : 'Add to Cart'}
                         </button>
                       </div>
                       {/* Product Info */}
@@ -817,7 +923,7 @@ const Home = () => {
                             onClick={(e) => {
                               e.preventDefault();
                               e.stopPropagation();
-                              addToCart(product, 1);
+                              handleAddToCart(product, 1);
                             }}
                           >
                             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">

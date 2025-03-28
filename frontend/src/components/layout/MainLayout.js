@@ -2,6 +2,8 @@ import React from 'react';
 import { Header } from './Header';
 import { Footer } from './Footer';
 import { ScrollToTop } from '../utils/ScrollToTop';
+import PageTransition from '../common/PageTransition';
+import '../../styles/pageTransition.css';
 
 /**
  * Main layout component that wraps all pages with header and footer
@@ -14,7 +16,9 @@ const MainLayout = ({ children }) => {
       <ScrollToTop />
       <Header />
       <main className="flex-grow">
-        {children}
+        <PageTransition>
+          {children}
+        </PageTransition>
       </main>
       <Footer />
     </div>

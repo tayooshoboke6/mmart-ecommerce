@@ -78,7 +78,7 @@ export const Header = () => {
           {/* Logo */}
           <div className="flex-shrink-0">
             <Link to="/" className="flex items-center">
-              <h1 className="text-2xl font-bold text-white">M-Mart<span className="text-[#FFB200]">+</span></h1>
+              <img src="/images/logo.png" alt="M-Mart+" className="h-8" />
             </Link>
           </div>
 

@@ -1,4 +1,4 @@
-import React, { createContext, useState, useEffect, useContext } from 'react';
+import React, { createContext, useState, useEffect, useContext, useRef } from 'react';
 import CartService from '../services/cart.service';
 import api from '../services/api';
 import { useAuth } from './AuthContext';
@@ -14,7 +14,20 @@ export const CartProvider = ({ children }) => {
   const [error, setError] = useState(null);
   const { isAuthenticated } = useAuth();
   const { showSuccess, showError } = useNotification();
-
+  
+  // Refs for delayed API calls
+  const apiCallTimeoutRef = useRef(null);
+  const pendingOperationsRef = useRef({});
+  
+  // Clear timeouts on unmount
+  useEffect(() => {
+    return () => {
+      if (apiCallTimeoutRef.current) {
+        clearTimeout(apiCallTimeoutRef.current);
+      }
+    };
+  }, []);
+  
   // Format price in Naira
   const formatPrice = (price) => {
     return new Intl.NumberFormat('en-NG', {
@@ -65,15 +78,26 @@ export const CartProvider = ({ children }) => {
     } catch (err) {
       console.error('Failed to fetch cart items:', err);
       setError(err);
+      
+      // Show specific error message from backend or fallback to generic message
+      const errorMessage = err.message || 'Failed to fetch cart items. Please try again.';
+      showError(errorMessage);
+      
+      throw err;
     } finally {
       setLoading(false);
     }
   };
 
-  // Add item to cart
+  // Add item to cart with delay
   const addToCart = async (product, quantity = 1, measurementId = null) => {
-    setLoading(true);
     setError(null);
+    
+    // Cancel any pending API calls
+    if (apiCallTimeoutRef.current) {
+      clearTimeout(apiCallTimeoutRef.current);
+    }
+    
     try {
       console.log('CartContext addToCart - Product received:', product);
       console.log('CartContext addToCart - Quantity:', quantity);
@@ -86,34 +110,71 @@ export const CartProvider = ({ children }) => {
       
       console.log('CartContext addToCart - Cart item to be sent:', cartItem);
       
-      const response = await CartService.addToCart(cartItem);
-      console.log('CartContext addToCart - Response:', response);
-      await fetchCartItems(); // Refresh cart after adding item
+      // Set loading state
+      setLoading(true);
       
-      // Show success notification
-      showSuccess(`${product.name} added to cart successfully!`);
+      // Store the operation details
+      const operationId = `add_${product.id}_${Date.now()}`;
+      pendingOperationsRef.current[operationId] = {
+        type: 'add',
+        data: cartItem
+      };
       
-      return response;
+      // Return a promise that will be resolved after the delay
+      return new Promise((resolve, reject) => {
+        // Set a timeout to execute the API call after a delay
+        apiCallTimeoutRef.current = setTimeout(async () => {
+          try {
+            // Check if this operation is still pending
+            if (pendingOperationsRef.current[operationId]) {
+              const response = await CartService.addToCart(cartItem);
+              
+              // On success, refresh the cart to get the real item with proper ID
+              await fetchCartItems();
+              
+              // Remove this operation from pending
+              delete pendingOperationsRef.current[operationId];
+              
+              // Resolve the promise with the response
+              resolve(response);
+            }
+          } catch (err) {
+            console.error('CartContext addToCart - Error:', err);
+            setError(err);
+            
+            // Remove this operation from pending
+            delete pendingOperationsRef.current[operationId];
+            
+            // Reject the promise with the error
+            reject(err);
+          } finally {
+            // Only reset loading if there are no more pending operations
+            if (Object.keys(pendingOperationsRef.current).length === 0) {
+              setLoading(false);
+            }
+          }
+        }, 300); // 300ms delay
+      });
     } catch (err) {
-      console.error('CartContext addToCart - Error:', err);
+      console.error('CartContext addToCart - Error setting up delayed call:', err);
       setError(err);
-      
-      // Show error notification
-      showError('Failed to add item to cart. Please try again.');
-      
-      throw err;
-    } finally {
       setLoading(false);
+      throw err;
     }
   };
 
-  // Update cart item quantity
+  // Update cart item quantity with delay
   const updateCartItem = async (itemId, quantity) => {
     setError(null);
     
+    // Cancel any pending API calls for this item
+    if (apiCallTimeoutRef.current) {
+      clearTimeout(apiCallTimeoutRef.current);
+    }
+    
     try {
-      // Make the API call in the background without setting loading state
-      const response = await CartService.updateCartItem(itemId, quantity);
+      // Store original cart items for rollback if needed
+      const originalItems = [...cartItems];
       
       // Update cart items locally without showing loading state
       setCartItems(prevItems => 
@@ -122,66 +183,163 @@ export const CartProvider = ({ children }) => {
         )
       );
       
-      // Show success notification for update (optional - can be removed for even less visual disruption)
-      showSuccess('Cart updated');
+      // Store the operation details
+      const operationId = `update_${itemId}_${Date.now()}`;
+      pendingOperationsRef.current[operationId] = {
+        type: 'update',
+        itemId,
+        quantity
+      };
       
-      return response;
+      // Return a promise that will be resolved after the delay
+      return new Promise((resolve, reject) => {
+        // Set a timeout to execute the API call after a delay
+        apiCallTimeoutRef.current = setTimeout(async () => {
+          try {
+            // Check if this operation is still pending
+            if (pendingOperationsRef.current[operationId]) {
+              const response = await CartService.updateCartItem(itemId, quantity);
+              
+              // Remove this operation from pending
+              delete pendingOperationsRef.current[operationId];
+              
+              // Resolve the promise with the response
+              resolve(response);
+            }
+          } catch (err) {
+            console.error('Failed to update cart item:', err);
+            setError(err);
+            
+            // Fetch fresh cart items on error
+            fetchCartItems();
+            
+            // Remove this operation from pending
+            delete pendingOperationsRef.current[operationId];
+            
+            // Reject the promise with the error
+            reject(err);
+          }
+        }, 300); // 300ms delay
+      });
     } catch (err) {
-      console.error('Failed to update cart item:', err);
+      console.error('Error setting up delayed update:', err);
       setError(err);
-      
-      // Show error notification
-      showError('Failed to update cart. Please try again.');
-      
       throw err;
     }
   };
 
-  // Remove item from cart
+  // Remove item from cart with delay
   const removeCartItem = async (itemId) => {
-    setLoading(true);
     setError(null);
+    
+    // Cancel any pending API calls
+    if (apiCallTimeoutRef.current) {
+      clearTimeout(apiCallTimeoutRef.current);
+    }
+    
     try {
-      const response = await CartService.removeCartItem(itemId);
-      await fetchCartItems(); // Refresh cart after removal
+      setLoading(true);
       
-      // Show success notification for removal
-      showSuccess('Item removed from cart!');
+      // Store the operation details
+      const operationId = `remove_${itemId}_${Date.now()}`;
+      pendingOperationsRef.current[operationId] = {
+        type: 'remove',
+        itemId
+      };
       
-      return response;
+      // Return a promise that will be resolved after the delay
+      return new Promise((resolve, reject) => {
+        // Set a timeout to execute the API call after a delay
+        apiCallTimeoutRef.current = setTimeout(async () => {
+          try {
+            // Check if this operation is still pending
+            if (pendingOperationsRef.current[operationId]) {
+              const response = await CartService.removeCartItem(itemId);
+              await fetchCartItems(); // Refresh cart after removal
+              
+              // Remove this operation from pending
+              delete pendingOperationsRef.current[operationId];
+              
+              // Resolve the promise with the response
+              resolve(response);
+            }
+          } catch (err) {
+            console.error('Failed to remove cart item:', err);
+            setError(err);
+            
+            // Remove this operation from pending
+            delete pendingOperationsRef.current[operationId];
+            
+            // Reject the promise with the error
+            reject(err);
+          } finally {
+            // Only reset loading if there are no more pending operations
+            if (Object.keys(pendingOperationsRef.current).length === 0) {
+              setLoading(false);
+            }
+          }
+        }, 300); // 300ms delay
+      });
     } catch (err) {
-      console.error('Failed to remove cart item:', err);
+      console.error('Error setting up delayed remove:', err);
       setError(err);
-      
-      // Show error notification
-      showError('Failed to remove item. Please try again.');
-      
-      throw err;
-    } finally {
       setLoading(false);
+      throw err;
     }
   };
 
-  // Clear cart
+  // Clear cart with optimistic updates
   const clearCart = async () => {
-    setLoading(true);
-    setError(null);
+    // Cancel any pending API calls
+    if (apiCallTimeoutRef.current) {
+      clearTimeout(apiCallTimeoutRef.current);
+    }
+    
+    // Clear all pending operations
+    pendingOperationsRef.current = {};
+    
+    // Store original cart items for potential rollback
+    const originalCartItems = [...cartItems];
+    
+    // Immediately clear the cart in the UI for better user experience
+    setCartItems([]);
+    
+    // Clear coupon-related localStorage items immediately
+    localStorage.removeItem('appliedCoupon');
+    localStorage.removeItem('discountAmount');
+    localStorage.removeItem('shippingFee');
+    localStorage.removeItem('deliveryInfo');
+    
     try {
-      const response = await CartService.clearCart();
-      setCartItems([]);
-      
-      // Clear coupon-related localStorage items
-      localStorage.removeItem('appliedCoupon');
-      localStorage.removeItem('discountAmount');
-      localStorage.removeItem('shippingFee');
-      localStorage.removeItem('deliveryInfo');
-      
-      return response;
+      // Return a promise that will be resolved after the API call
+      return new Promise((resolve, reject) => {
+        // Set a timeout to execute the API call after a delay
+        apiCallTimeoutRef.current = setTimeout(async () => {
+          try {
+            setLoading(true);
+            const response = await CartService.clearCart();
+            setLoading(false);
+            resolve(response);
+          } catch (err) {
+            console.error('Failed to clear cart:', err);
+            setError(err);
+            setLoading(false);
+            
+            // Restore original cart items on error
+            setCartItems(originalCartItems);
+            
+            // Show specific error message from backend or fallback to generic message
+            const errorMessage = err.response?.data?.message || err.message || 'Failed to clear cart. Please try again.';
+            showError(errorMessage);
+            
+            reject(err);
+          }
+        }, 300); // 300ms delay
+      });
     } catch (err) {
+      console.error('Error setting up delayed clear cart:', err);
       setError(err);
       throw err;
-    } finally {
-      setLoading(false);
     }
   };
 

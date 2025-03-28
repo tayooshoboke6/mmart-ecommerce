@@ -199,45 +199,79 @@ const Cart = () => {
     
     const item = localCartItems.find(item => item.id === itemId);
     if (item && newQuantity <= (item.product ? item.product.stock_quantity : item.stock_quantity || 10)) {
-      // Update local state instantly
+      // Track which items are being updated
+      setUpdatingItems(prev => ({
+        ...prev,
+        [itemId]: true
+      }));
+      
+      // Update local state instantly for immediate UI feedback
       setLocalCartItems(prevItems => 
         prevItems.map(cartItem => 
           cartItem.id === itemId ? { ...cartItem, quantity: newQuantity } : cartItem
         )
       );
       
-      // Debounce the API call to prevent rapid successive calls
-      const timerId = setTimeout(() => {
-        updateCartItem(itemId, newQuantity).catch(error => {
+      // The API call is already debounced in CartContext
+      // We just need to handle success/failure here
+      updateCartItem(itemId, newQuantity)
+        .then(() => {
+          // Success - item is updated in the backend
+          console.log(`Item ${itemId} quantity updated to ${newQuantity}`);
+        })
+        .catch(error => {
           console.error('Failed to update quantity:', error);
           // If API call fails, revert to original cart items from context
           setLocalCartItems(cartItems);
+        })
+        .finally(() => {
+          // Remove the item from updating state
+          setUpdatingItems(prev => {
+            const newState = { ...prev };
+            delete newState[itemId];
+            return newState;
+          });
         });
-      }, 300); // 300ms debounce
-      
-      // Clean up timer on component unmount
-      return () => clearTimeout(timerId);
     }
   };
 
-  // Handle remove item
+  // Handle remove item with optimistic updates
   const handleRemoveItem = (itemId) => {
     if (window.confirm('Are you sure you want to remove this item from your cart?')) {
-      removeCartItem(itemId);
+      // Find the item to be removed for potential rollback
+      const itemToRemove = localCartItems.find(item => item.id === itemId);
+      
+      // Optimistically remove from local state
+      setLocalCartItems(prev => prev.filter(item => item.id !== itemId));
+      
+      // Track which items are being updated
+      setUpdatingItems(prev => ({
+        ...prev,
+        [itemId]: true
+      }));
+      
+      // The API call is already debounced in CartContext
+      removeCartItem(itemId)
+        .then(() => {
+          // Success - item is removed in the backend
+          console.log(`Item ${itemId} removed from cart`);
+        })
+        .catch(error => {
+          console.error('Failed to remove item:', error);
+          // If API call fails, add the item back to local state
+          if (itemToRemove) {
+            setLocalCartItems(prev => [...prev, itemToRemove]);
+          }
+        })
+        .finally(() => {
+          // Remove the item from updating state
+          setUpdatingItems(prev => {
+            const newState = { ...prev };
+            delete newState[itemId];
+            return newState;
+          });
+        });
     }
-  };
-
-  // Clear persisted data when cart is cleared
-  const handleClearCart = () => {
-    clearCart();
-    setAppliedCoupon(null);
-    setDiscountAmount(0);
-    setShippingFee(0);
-    setDeliveryInfo(null);
-    localStorage.removeItem('appliedCoupon');
-    localStorage.removeItem('discountAmount');
-    localStorage.removeItem('shippingFee');
-    localStorage.removeItem('deliveryInfo');
   };
 
   // Handle apply coupon
@@ -373,6 +407,47 @@ const Cart = () => {
     navigate('/checkout');
   };
 
+  // Handle clear cart with optimistic updates
+  const handleClearCart = () => {
+    if (window.confirm('Are you sure you want to clear your cart?')) {
+      // Optimistically update UI
+      setLocalCartItems([]);
+      setDiscountAmount(0);
+      setShippingFee(0);
+      
+      // Set clearing state for UI feedback
+      setIsClearingCart(true);
+      
+      // Clear localStorage items immediately
+      setAppliedCoupon(null);
+      localStorage.removeItem('appliedCoupon');
+      localStorage.removeItem('discountAmount');
+      localStorage.removeItem('shippingFee');
+      localStorage.removeItem('deliveryInfo');
+      
+      // Call the API in the background
+      clearCart()
+        .then(() => {
+          // Success notification
+          console.log('Cart cleared successfully');
+        })
+        .catch((error) => {
+          console.error('Failed to clear cart:', error);
+          // If API call fails, fetch fresh cart items
+          setCartItems([]);
+        })
+        .finally(() => {
+          // Reset clearing state after a short delay for better UX
+          setTimeout(() => {
+            setIsClearingCart(false);
+          }, 500);
+        });
+    }
+  };
+
+  // Add state for clearing cart
+  const [isClearingCart, setIsClearingCart] = useState(false);
+
   return (
     <div className="min-h-screen bg-gray-50 py-8">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -476,10 +551,15 @@ const Cart = () => {
                     Continue Shopping
                   </Link>
                   <button
-                    onClick={() => clearCart()}
-                    className="px-6 py-3 bg-red-100 text-red-700 rounded-md hover:bg-red-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
+                    onClick={handleClearCart}
+                    disabled={isClearingCart || localCartItems.length === 0}
+                    className={`px-6 py-3 rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 ${
+                      isClearingCart || localCartItems.length === 0
+                        ? 'bg-red-100 text-red-300 cursor-not-allowed'
+                        : 'bg-red-100 text-red-700 hover:bg-red-200'
+                    }`}
                   >
-                    Clear Cart
+                    {isClearingCart ? 'Clearing...' : 'Clear Cart'}
                   </button>
                 </div>
               </div>

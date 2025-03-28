@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="24px" height="24px" viewBox="0 0 24 24" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+  <title>Shopping Cart</title>
+  <g stroke="none" stroke-width="1" fill="none" fill-rule="evenodd">
+    <path d="M8,18 C6.9,18 6.01,18.9 6.01,20 C6.01,21.1 6.9,22 8,22 C9.1,22 10,21.1 10,20 C10,18.9 9.1,18 8,18 Z M0,0 L0,2 L2,2 L5.6,9.59 L4.2,12.03 C4.08,12.32 4,12.65 4,13 C4,14.1 4.9,15 6,15 L18,15 L18,13 L6.42,13 C6.28,13 6.17,12.89 6.17,12.75 L6.2,12.63 L7.1,11 L14.55,11 C15.3,11 15.96,10.59 16.3,9.97 L19.88,3.5 C19.96,3.34 20,3.17 20,3 C20,2.45 19.55,2 19,2 L4.21,2 L3.27,0 L0,0 Z M16,18 C14.9,18 14.01,18.9 14.01,20 C14.01,21.1 14.9,22 16,22 C17.1,22 18,21.1 18,20 C18,18.9 17.1,18 16,18 Z" fill="#FFD700" fill-rule="nonzero"></path>
+  </g>
+</svg>

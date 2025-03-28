@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { formatNaira } from '../../utils/formatters';
 import { useCart } from '../../context/CartContext';
+import { useNotification } from '../../context/NotificationContext';
 import styled from 'styled-components';
 
 // Styled components for the product card
@@ -173,28 +174,21 @@ const BasePrice = styled.div`
 `;
 
 const AddToCartButton = styled.button`
+  position: absolute;
+  bottom: 12px;
+  right: 12px;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
   background-color: #3B82F6;
   color: white;
-  border: none;
-  border-radius: 50%;
-  width: 40px;
-  height: 40px;
   display: flex;
   align-items: center;
   justify-content: center;
+  border: none;
   cursor: pointer;
   transition: all 0.2s ease;
-  position: absolute;
-  bottom: 16px;
-  right: 16px;
-  box-shadow: 0 4px 6px rgba(59, 130, 246, 0.25);
-  
-  @media (max-width: 640px) {
-    width: 36px;
-    height: 36px;
-    bottom: 12px;
-    right: 12px;
-  }
+  z-index: 2;
   
   &:hover {
     background-color: #2563EB;
@@ -206,6 +200,20 @@ const AddToCartButton = styled.button`
     cursor: not-allowed;
     transform: none;
   }
+  
+  &.added {
+    background-color: #10B981;
+    width: auto;
+    padding: 0 12px;
+    border-radius: 18px;
+  }
+  
+  &.error {
+    background-color: #EF4444;
+    width: auto;
+    padding: 0 12px;
+    border-radius: 18px;
+  }
 `;
 
 /**
@@ -216,13 +224,110 @@ const AddToCartButton = styled.button`
  * @param {boolean} props.showNewBadge - Whether to show the NEW badge
  */
 const ProductCard = ({ product, viewType = 'grid', showNewBadge = false }) => {
-  const { addToCart, loading } = useCart();
+  const { addToCart, loading: globalLoading } = useCart();
+  const { showSuccess, showError } = useNotification();
+  const [buttonState, setButtonState] = useState('normal'); // 'normal', 'added', 'error'
+  const [errorMessage, setErrorMessage] = useState('');
+  const [isLoading, setIsLoading] = useState(false); // Local loading state
+  const timeoutRef = useRef(null); // Ref to store timeout ID for cleanup
   
-  // Handle add to cart
+  // Cleanup timeouts on unmount
+  useEffect(() => {
+    return () => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
+    };
+  }, []);
+  
+  // Background sync function for add to cart
+  const backgroundAddToCart = useCallback((product) => {
+    // The addToCart function now handles the delay internally
+    // We just need to handle success/failure here
+    try {
+      // Make API call with the built-in delay
+      addToCart(product, 1)
+        .then(() => {
+          console.log('Product successfully synced with server');
+        })
+        .catch((error) => {
+          console.error('Background add to cart failed:', error);
+          // Only show error notification if the API call fails
+          showError(error.response?.data?.message || error.message || 'Failed to add to cart. Please try again.');
+          
+          // Reset button state on error
+          setButtonState('error');
+          setTimeout(() => {
+            setButtonState('normal');
+          }, 1500);
+        });
+    } catch (error) {
+      console.error('Error initiating background add to cart:', error);
+      showError(error.message || 'Failed to add to cart');
+      
+      // Reset button state on error
+      setButtonState('error');
+      setTimeout(() => {
+        setButtonState('normal');
+      }, 1500);
+    }
+  }, [addToCart, showSuccess, showError]);
+  
+  // Handle add to cart with visual feedback
   const handleAddToCart = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    addToCart(product, 1);
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    
+    // Client-side validation before making API call
+    try {
+      // Validate product exists and has required fields
+      if (!product || !product.id) {
+        throw new Error('Invalid product');
+      }
+      
+      // Validate product is in stock
+      if (product.stock_quantity <= 0 || product.is_in_stock === false) {
+        throw new Error('Product is out of stock');
+      }
+      
+      // Prevent multiple clicks
+      if (buttonState !== 'normal') {
+        return;
+      }
+      
+      // Immediately update UI to show added state
+      setButtonState('added');
+      
+      // Show success notification immediately
+      showSuccess(`${product.name} added to cart!`);
+      
+      // Call the background sync function
+      backgroundAddToCart(product);
+      
+      // Reset UI state after 1.5 seconds for better UX
+      // This is independent of the API call timing
+      timeoutRef.current = setTimeout(() => {
+        setButtonState('normal');
+      }, 1500);
+      
+    } catch (error) {
+      console.error('Error adding to cart:', error);
+      
+      // Show error state
+      setButtonState('error');
+      setErrorMessage(error.message || 'Failed to add to cart');
+      
+      // Show error notification
+      showError(error.message || 'Failed to add to cart');
+      
+      // Reset after 2 seconds
+      timeoutRef.current = setTimeout(() => {
+        setButtonState('normal');
+        setErrorMessage('');
+      }, 2000);
+    }
   };
   
   // Check if product has a discount
@@ -272,6 +377,19 @@ const ProductCard = ({ product, viewType = 'grid', showNewBadge = false }) => {
     );
   };
   
+  // Get appropriate button text based on state
+  const getButtonText = () => {
+    if (buttonState === 'added') return 'Added!';
+    if (buttonState === 'error') {
+      // For stock issues, show a more specific message
+      if (errorMessage.toLowerCase().includes('stock')) {
+        return 'Out of Stock';
+      }
+      return 'Error!';
+    }
+    return '';
+  };
+  
   if (viewType === 'grid') {
     return (
       <CardContainer>
@@ -307,11 +425,15 @@ const ProductCard = ({ product, viewType = 'grid', showNewBadge = false }) => {
         
         <AddToCartButton
           onClick={handleAddToCart}
-          disabled={loading || (product.stock_quantity !== undefined && product.stock_quantity <= 0)}
+          disabled={buttonState !== 'normal'}
           aria-label="Add to cart"
+          className={buttonState !== 'normal' ? buttonState : ''}
+          title={buttonState === 'error' ? errorMessage : ''}
         >
-          {loading ? (
-            <span className="animate-spin">⟳</span>
+          {buttonState === 'added' ? (
+            <span>Added!</span>
+          ) : buttonState === 'error' ? (
+            <span>{errorMessage.toLowerCase().includes('stock') ? 'Out of Stock' : errorMessage}</span>
           ) : (
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" width="20" height="20">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -370,12 +492,20 @@ const ProductCard = ({ product, viewType = 'grid', showNewBadge = false }) => {
             
             <button
               onClick={handleAddToCart}
-              disabled={loading || (product.stock_quantity !== undefined && product.stock_quantity <= 0)}
-              className="w-10 h-10 bg-[#3B82F6] text-white rounded-full flex items-center justify-center hover:bg-[#2563EB] transition-all shadow-md"
-              aria-label="Add to cart"
+              disabled={buttonState !== 'normal'}
+              className={`w-10 h-10 rounded-full flex items-center justify-center transition-all duration-300 ${
+                buttonState === 'added' 
+                  ? 'bg-green-500 text-white' 
+                  : buttonState === 'error'
+                    ? 'bg-red-500 text-white'
+                    : 'bg-[#3B82F6] text-white hover:bg-[#2563EB]'
+              }`}
+              title={buttonState === 'error' ? errorMessage : ''}
             >
-              {loading ? (
-                <span className="animate-spin">⟳</span>
+              {buttonState === 'added' ? (
+                <span className="text-xs">Added!</span>
+              ) : buttonState === 'error' ? (
+                <span className="text-xs">{errorMessage.toLowerCase().includes('stock') ? 'Out of Stock' : errorMessage}</span>
               ) : (
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" width="20" height="20">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
