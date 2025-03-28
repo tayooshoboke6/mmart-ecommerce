@@ -21,11 +21,21 @@ export const prefetchData = async (url, maxAge = 60000) => {
     // Make API request in the background
     const response = await api.get(url);
     
+    // Extract the data array based on the endpoint
+    let extractedData;
+    if (url.includes('/products/')) {
+      extractedData = response.data && response.data.products ? response.data.products : [];
+    } else if (url.includes('/categories')) {
+      extractedData = response.data && response.data.categories ? response.data.categories : [];
+    } else {
+      extractedData = response.data;
+    }
+    
     // Store in cache
-    cache.data[url] = response.data;
+    cache.data[url] = extractedData;
     cache.timestamp[url] = Date.now();
     
-    return response.data;
+    return extractedData;
   } catch (error) {
     console.error(`Error prefetching ${url}:`, error);
     throw error;
@@ -56,8 +66,13 @@ export const getCachedData = async (url, maxAge = 60000) => {
  * Prefetch common data that might be needed soon
  */
 export const prefetchCommonData = () => {
-  // Prefetch data that's commonly needed
-  prefetchData('/products/featured', 300000); // 5 minutes
+  // Prefetch all product sections
+  prefetchData('/products/by-type/featured', 300000); // 5 minutes
+  prefetchData('/products/by-type/new_arrivals', 300000); // 5 minutes
+  prefetchData('/products/by-type/best_sellers', 300000); // 5 minutes
+  prefetchData('/products/by-type/hot_deals', 300000); // 5 minutes
+  
+  // Prefetch categories
   prefetchData('/categories', 600000); // 10 minutes
 };
 

@@ -1,13 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import ProductCard from '../components/product/ProductCard';
-import ProductService from '../services/product.service';
+import ProductService from '../services/ProductService';
 import { formatNaira } from '../utils/formatters';
 import Slider from 'react-slick';
 import 'slick-carousel/slick/slick.css';
 import 'slick-carousel/slick/slick-theme.css';
 import { useCart } from '../context/CartContext';
 import { getCachedData, prefetchData } from '../utils/prefetch';
+import SkeletonLoader from '../components/common/SkeletonLoader';
 
 const Home = () => {
   const [featuredProducts, setFeaturedProducts] = useState([]);
@@ -50,7 +51,30 @@ const Home = () => {
       try {
         setLoading(true);
         
-        // Try to get data from cache first
+        // Direct API calls for debugging
+        console.log('Directly calling APIs for debugging...');
+        
+        // Featured products
+        const featuredResponse = await ProductService.getFeaturedProducts();
+        console.log('Featured API direct response:', featuredResponse);
+        
+        // New arrivals
+        const newArrivalsResponse = await ProductService.getNewArrivals();
+        console.log('New Arrivals API direct response:', newArrivalsResponse);
+        
+        // Best sellers
+        const bestSellersResponse = await ProductService.getBestSellers();
+        console.log('Best Sellers API direct response:', bestSellersResponse);
+        
+        // Hot deals
+        const hotDealsResponse = await ProductService.getHotDeals();
+        console.log('Hot Deals API direct response:', hotDealsResponse);
+        
+        // Categories
+        const categoriesResponse = await ProductService.getCategories();
+        console.log('Categories API direct response:', categoriesResponse);
+        
+        // If we don't have cached data, fetch directly
         let featuredData = [];
         let newArrivalsData = [];
         let bestSellersData = [];
@@ -59,337 +83,112 @@ const Home = () => {
         
         try {
           // Use cached data with fallback to API
-          featuredData = await getCachedData('/products/featured');
-          
-          // Prefetch other common pages while we're here
-          // This happens in the background and doesn't block rendering
-          prefetchData('/products?page=1');
-          prefetchData('/categories');
-          
-          // For popular products, prefetch their detail pages
-          if (featuredData && featuredData.length) {
-            // Prefetch the first 3 featured products' details
-            featuredData.slice(0, 3).forEach(product => {
-              if (product && product.slug) {
-                prefetchData(`/products/${product.slug}`);
-              }
-            });
+          featuredData = await getCachedData('/products/by-type/featured');
+          if (!Array.isArray(featuredData)) {
+            featuredData = [];
           }
         } catch (error) {
-          console.error('Error fetching cached data:', error);
-          // If cache fails, we'll fetch directly below
+          console.error('Error fetching featured products from cache:', error);
+          
+          // If cache fails, fetch directly
+          try {
+            const response = await ProductService.getFeaturedProducts();
+            console.log('Featured API Response:', response);
+            featuredData = response.data && response.data.products ? response.data.products : [];
+          } catch (apiError) {
+            console.error('API call for featured products failed:', apiError);
+            featuredData = [];
+          }
         }
         
-        // If we don't have cached data, fetch directly
-        if (!featuredData || !featuredData.length) {
-          const featuredResponse = await ProductService.getProductsByType('featured');
-          featuredData = featuredResponse.products;
-        }
-        
-        // Continue with other API calls
-        let realNewArrivals = [];
         try {
-          const response = await ProductService.getProductsByType('new_arrivals');
-          
-          // Validate API response structure
-          if (!response || typeof response !== 'object') {
-            console.error('Invalid API response format for new arrivals');
-            throw new Error('Invalid API response format');
+          // Use cached data with fallback to API
+          newArrivalsData = await getCachedData('/products/by-type/new_arrivals');
+          if (!Array.isArray(newArrivalsData)) {
+            newArrivalsData = [];
           }
+        } catch (error) {
+          console.error('Error fetching new arrivals from cache:', error);
           
-          // Check if products array exists and is an array
-          if (!Array.isArray(response.products)) {
-            console.error('Products data is not an array for new arrivals');
-            throw new Error('Invalid products data format');
+          // If cache fails, fetch directly
+          try {
+            const response = await ProductService.getNewArrivals();
+            console.log('New Arrivals API Response:', response);
+            newArrivalsData = response.data && response.data.products ? response.data.products : [];
+          } catch (apiError) {
+            console.error('API call for new arrivals failed:', apiError);
+            newArrivalsData = [];
           }
-          
-          // Map API response fields to match component expectations
-          realNewArrivals = (response.products || []).map(product => ({
-            ...product,
-            is_featured: product.is_featured || false,
-            is_new_arrival: product.is_new_arrival || true, // Force true for new arrivals
-            is_hot_deal: product.is_hot_deal || false,
-            is_active: product.is_active || true,
-            is_in_stock: product.is_in_stock || (product.stock_quantity > 0),
-            is_on_sale: product.is_on_sale || (product.sale_price && product.base_price && parseFloat(product.sale_price) < parseFloat(product.base_price)),
-            discount_percentage: product.discount_percentage || (product.base_price && product.sale_price ? 
-              Math.round(((parseFloat(product.base_price) - parseFloat(product.sale_price)) / parseFloat(product.base_price)) * 100) : 0)
-          }));
-          console.log('Fetched real new arrivals:', realNewArrivals);
-        } catch (apiError) {
-          console.error('API call for new arrivals failed:', apiError);
         }
         
-        // Mock new arrivals
-        const mockNewArrivals = [
-          {
-            id: 7,
-            name: "Organic Body Wash",
-            slug: "organic-body-wash",
-            image_url: "https://images.unsplash.com/photo-1608248597279-f99d160bfcbc?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1470&q=80",
-            base_price: 5999,
-            sale_price: 4799,
-            discount_percentage: 20,
-            rating: 4.2,
-            review_count: 64,
-            is_new: true
-          },
-          {
-            id: 8,
-            name: "Natural Hair Conditioner",
-            slug: "natural-hair-conditioner",
-            image_url: "https://images.unsplash.com/photo-1535585209827-a15fcdbc4c2d?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1470&q=80",
-            base_price: 6500,
-            sale_price: 6500,
-            discount_percentage: 0,
-            rating: 4.7,
-            review_count: 92,
-            is_new: true
-          },
-          {
-            id: 9,
-            name: "Anti-Aging Face Serum",
-            slug: "anti-aging-face-serum",
-            image_url: "https://images.unsplash.com/photo-1620916566398-39f1143ab7be?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1374&q=80",
-            base_price: 12999,
-            sale_price: 9999,
-            discount_percentage: 23,
-            rating: 4.9,
-            review_count: 156,
-            is_new: true
-          },
-          {
-            id: 10,
-            name: "Whitening Toothpaste",
-            slug: "whitening-toothpaste",
-            image_url: "https://images.unsplash.com/photo-1559304822-9eb2813c9844?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1470&q=80",
-            base_price: 1999,
-            sale_price: 1599,
-            discount_percentage: 20,
-            rating: 4.3,
-            review_count: 78,
-            is_new: true
-          }
-        ];
-        
-        // Combine real and mock products - real products first, filter out invalid products
-        const validRealNewArrivals = realNewArrivals.filter(validateProduct);
-        const validMockNewArrivals = mockNewArrivals.filter(validateProduct);
-        newArrivalsData = [...validRealNewArrivals, ...validMockNewArrivals];
-
-        let realBestSellers = [];
         try {
-          const response = await ProductService.getProductsByType('best_sellers');
-          
-          // Validate API response structure
-          if (!response || typeof response !== 'object') {
-            console.error('Invalid API response format for best sellers');
-            throw new Error('Invalid API response format');
+          // Use cached data with fallback to API
+          bestSellersData = await getCachedData('/products/by-type/best_sellers');
+          if (!Array.isArray(bestSellersData)) {
+            bestSellersData = [];
           }
+        } catch (error) {
+          console.error('Error fetching best sellers from cache:', error);
           
-          // Check if products array exists and is an array
-          if (!Array.isArray(response.products)) {
-            console.error('Products data is not an array for best sellers');
-            throw new Error('Invalid products data format');
+          // If cache fails, fetch directly
+          try {
+            const response = await ProductService.getBestSellers();
+            console.log('Best Sellers API Response:', response);
+            bestSellersData = response.data && response.data.products ? response.data.products : [];
+          } catch (apiError) {
+            console.error('API call for best sellers failed:', apiError);
+            bestSellersData = [];
           }
-          
-          // Map API response fields to match component expectations
-          realBestSellers = (response.products || []).map(product => ({
-            ...product,
-            is_featured: product.is_featured || false,
-            is_new_arrival: product.is_new_arrival || false,
-            is_hot_deal: product.is_hot_deal || false,
-            is_in_stock: product.is_in_stock || (product.stock_quantity > 0),
-            is_on_sale: product.is_on_sale || (product.sale_price && product.base_price && parseFloat(product.sale_price) < parseFloat(product.base_price)),
-            discount_percentage: product.discount_percentage || (product.base_price && product.sale_price ? 
-              Math.round(((parseFloat(product.base_price) - parseFloat(product.sale_price)) / parseFloat(product.base_price)) * 100) : 0)
-          }));
-          console.log('Fetched real best sellers:', realBestSellers);
-        } catch (apiError) {
-          console.error('API call for best sellers failed:', apiError);
         }
         
-        // Mock best sellers
-        const mockBestSellers = [
-          {
-            id: 11,
-            name: "Moisturizing Shower Gel",
-            slug: "moisturizing-shower-gel",
-            image_url: "https://images.unsplash.com/photo-1556229010-aa3f7ff66b24?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1374&q=80",
-            base_price: 3500,
-            sale_price: 2450,
-            discount_percentage: 30,
-            rating: 4.6,
-            review_count: 103
-          },
-          {
-            id: 12,
-            name: "Exfoliating Face Scrub",
-            slug: "exfoliating-face-scrub",
-            image_url: "https://images.unsplash.com/photo-1601049541289-9b1b7bbbfe19?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1470&q=80",
-            base_price: 4299,
-            sale_price: 2999,
-            discount_percentage: 30,
-            rating: 4.4,
-            review_count: 67
-          },
-          {
-            id: 13,
-            name: "Hydrating Face Mask",
-            slug: "hydrating-face-mask",
-            image_url: "https://images.unsplash.com/photo-1596755389378-c31d21fd1273?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1374&q=80",
-            base_price: 2999,
-            sale_price: 1799,
-            discount_percentage: 40,
-            rating: 4.7,
-            review_count: 89
-          },
-          {
-            id: 14,
-            name: "Vitamin C Serum",
-            slug: "vitamin-c-serum",
-            image_url: "https://images.unsplash.com/photo-1615397349754-cfa2066a298e?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1374&q=80",
-            base_price: 8999,
-            sale_price: 5399,
-            discount_percentage: 40,
-            rating: 4.8,
-            review_count: 132
-          }
-        ];
-        
-        // Combine real and mock products - real products first, filter out invalid products
-        const validRealBestSellers = realBestSellers.filter(validateProduct);
-        const validMockBestSellers = mockBestSellers.filter(validateProduct);
-        bestSellersData = [...validRealBestSellers, ...validMockBestSellers];
-
-        // Fetch hot deals
-        let realHotDeals = [];
         try {
-          const response = await ProductService.getProductsByType('hot_deals');
-          
-          // Validate API response structure
-          if (!response || typeof response !== 'object') {
-            console.error('Invalid API response format for hot deals');
-            throw new Error('Invalid API response format');
+          // Use cached data with fallback to API
+          hotDealsData = await getCachedData('/products/by-type/hot_deals');
+          if (!Array.isArray(hotDealsData)) {
+            hotDealsData = [];
           }
+        } catch (error) {
+          console.error('Error fetching hot deals from cache:', error);
           
-          // Check if products array exists and is an array
-          if (!Array.isArray(response.products)) {
-            console.error('Products data is not an array for hot deals');
-            throw new Error('Invalid products data format');
+          // If cache fails, fetch directly
+          try {
+            const response = await ProductService.getHotDeals();
+            console.log('Hot Deals API Response:', response);
+            hotDealsData = response.data && response.data.products ? response.data.products : [];
+          } catch (apiError) {
+            console.error('API call for hot deals failed:', apiError);
+            hotDealsData = [];
           }
-          
-          // Map API response fields to match component expectations
-          realHotDeals = (response.products || []).map(product => {
-            // Calculate discount percentage if not provided
-            const discountPercentage = product.discount_percentage || 
-              (product.base_price && product.sale_price ? 
-                Math.round(((parseFloat(product.base_price) - parseFloat(product.sale_price)) / parseFloat(product.base_price)) * 100) : 0);
-            
-            // Log product discount information for debugging
-            console.log(`Product: ${product.name}, Base: ${product.base_price}, Sale: ${product.sale_price}, Discount: ${discountPercentage}%`);
-            
-            return {
-              ...product,
-              is_featured: product.is_featured || false,
-              is_new_arrival: product.is_new_arrival || false,
-              is_hot_deal: product.is_hot_deal || true,
-              is_in_stock: product.is_in_stock || (product.stock_quantity > 0),
-              is_on_sale: product.is_on_sale || (product.sale_price && product.base_price && parseFloat(product.sale_price) < parseFloat(product.base_price)),
-              discount_percentage: discountPercentage
-            };
-          });
-          console.log('Fetched real hot deals:', realHotDeals);
-        } catch (apiError) {
-          console.error('API call for hot deals failed:', apiError);
         }
         
-        // Use the mock data for hot deals if the API call fails or returns empty, filter out invalid products
-        const validRealHotDeals = realHotDeals.filter(validateProduct);
-        const validMockHotDeals = mockBestSellers.filter(product => product.discount_percentage > 0).filter(validateProduct);
-        hotDealsData = validRealHotDeals.length > 0 ? validRealHotDeals : validMockHotDeals;
-
-        // Mock categories
-        const mockCategories = [
-          {
-            id: 1,
-            name: 'Groceries',
-            slug: 'groceries',
-            image_url: 'https://images.unsplash.com/photo-1542838132-92c53300491e?q=80&w=400&auto=format&fit=crop',
-            product_count: 120
-          },
-          {
-            id: 7,
-            name: 'Electronics',
-            slug: 'electronics',
-            image_url: 'https://images.unsplash.com/photo-1498049794561-7780e7231661?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1470&q=80',
-            product_count: 85
-          },
-          {
-            id: 3,
-            name: 'Fashion',
-            slug: 'fashion',
-            image_url: 'https://images.unsplash.com/photo-1445205170230-76b7b1e5a7a5?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1471&q=80',
-            product_count: 150
-          },
-          {
-            id: 4,
-            name: 'Home & Kitchen',
-            slug: 'home-kitchen',
-            image_url: 'https://images.unsplash.com/photo-1556911220-bda9f7f3fe9b?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1470&q=80',
-            product_count: 95
-          },
-          {
-            id: 5,
-            name: 'Health & Beauty',
-            slug: 'health-beauty',
-            image_url: 'https://images.unsplash.com/photo-1598440947619-2c35fc9aa908?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1470&q=80',
-            product_count: 70
-          },
-          {
-            id: 6,
-            name: 'Baby Products',
-            slug: 'baby-products',
-            image_url: 'https://images.unsplash.com/photo-1515488042361-ee00e0ddd4e4?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1475&q=80',
-            product_count: 45
-          }
-        ];
-        
-        let realCategories = [];
+        // Fetch categories from API
         try {
-          const response = await ProductService.getCategories();
-          
-          // Validate API response structure
-          if (!response || typeof response !== 'object') {
-            console.error('Invalid API response format for categories');
-            throw new Error('Invalid API response format');
+          // Use cached data with fallback to API
+          categoriesData = await getCachedData('/categories');
+          if (!Array.isArray(categoriesData)) {
+            categoriesData = [];
           }
+        } catch (error) {
+          console.error('Error fetching categories from cache:', error);
           
-          // Check if categories array exists and is an array
-          if (!Array.isArray(response.categories)) {
-            console.error('Categories data is not an array');
-            throw new Error('Invalid categories data format');
+          // If cache fails, fetch directly
+          try {
+            const response = await ProductService.getCategories();
+            console.log('Categories API Response:', response);
+            categoriesData = response.data && response.data.categories ? response.data.categories : [];
+          } catch (apiError) {
+            console.error('API call for categories failed:', apiError);
+            categoriesData = [];
           }
-          
-          realCategories = response.categories || [];
-          console.log('Fetched real categories:', realCategories);
-        } catch (apiError) {
-          console.error('API call for categories failed:', apiError);
         }
         
-        // Combine real and mock categories - real categories first
-        const uniqueCategories = [...realCategories];
-        
-        // Only add mock categories that don't have ID conflicts with real categories
-        mockCategories.forEach(mockCategory => {
-          if (!uniqueCategories.some(cat => cat.id === mockCategory.id)) {
-            uniqueCategories.push(mockCategory);
-          }
-        });
-        
-        categoriesData = uniqueCategories;
-
         // Filter out invalid products
+        console.log('Before filtering - Featured:', featuredData);
+        console.log('Before filtering - New Arrivals:', newArrivalsData);
+        console.log('Before filtering - Best Sellers:', bestSellersData);
+        console.log('Before filtering - Hot Deals:', hotDealsData);
+        console.log('Before filtering - Categories:', categoriesData);
+        
         setFeaturedProducts(featuredData.filter(validateProduct));
         setNewArrivals(newArrivalsData.filter(validateProduct));
         setBestSellers(bestSellersData.filter(validateProduct));
@@ -485,10 +284,119 @@ const Home = () => {
     }
   };
 
+  // If loading, show skeleton loaders instead of spinner
   if (loading) {
     return (
-      <div className="flex justify-center items-center h-screen">
-        <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-[#3B82F6]"></div>
+      <div className="bg-[#F5F5F5] min-h-screen">
+        <div className="container mx-auto px-4 py-8">
+          {/* Banner Skeleton */}
+          <div className="mb-8">
+            <SkeletonLoader type="banner" count={1} />
+          </div>
+          
+          {/* Featured Products Skeleton */}
+          <div className="mb-10">
+            <h2 className="text-2xl font-bold mb-4">Featured Products</h2>
+            <div className="relative">
+              <div className="flex overflow-x-auto pb-4 space-x-4">
+                {[...Array(5)].map((_, i) => (
+                  <div key={i} className="min-w-[200px] w-[200px] flex-shrink-0">
+                    <div className="bg-white rounded-lg shadow-sm p-3 animate-pulse">
+                      <div className="h-40 bg-gray-200 rounded-md mb-3"></div>
+                      <div className="h-4 bg-gray-200 rounded w-3/4 mb-2"></div>
+                      <div className="h-3 bg-gray-200 rounded w-1/2 mb-3"></div>
+                      <div className="flex justify-between items-center">
+                        <div className="h-5 bg-gray-200 rounded w-1/3"></div>
+                        <div className="h-7 bg-gray-200 rounded-full w-7"></div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+          
+          {/* New Arrivals Skeleton */}
+          <div className="mb-10">
+            <h2 className="text-2xl font-bold mb-4">New Arrivals</h2>
+            <div className="relative">
+              <div className="flex overflow-x-auto pb-4 space-x-4">
+                {[...Array(5)].map((_, i) => (
+                  <div key={i} className="min-w-[200px] w-[200px] flex-shrink-0">
+                    <div className="bg-white rounded-lg shadow-sm p-3 animate-pulse">
+                      <div className="h-40 bg-gray-200 rounded-md mb-3"></div>
+                      <div className="h-4 bg-gray-200 rounded w-3/4 mb-2"></div>
+                      <div className="h-3 bg-gray-200 rounded w-1/2 mb-3"></div>
+                      <div className="flex justify-between items-center">
+                        <div className="h-5 bg-gray-200 rounded w-1/3"></div>
+                        <div className="h-7 bg-gray-200 rounded-full w-7"></div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+          
+          {/* Categories Skeleton */}
+          <div className="mb-10">
+            <h2 className="text-2xl font-bold mb-4">Shop by Categories</h2>
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
+              {[...Array(6)].map((_, i) => (
+                <div key={i} className="bg-white rounded-lg overflow-hidden shadow-sm animate-pulse">
+                  <div className="h-32 bg-gray-200 mb-2"></div>
+                  <div className="p-3">
+                    <div className="h-4 bg-gray-200 rounded w-2/3 mb-1"></div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+          
+          {/* Hot Deals Skeleton */}
+          <div className="mb-10">
+            <h2 className="text-2xl font-bold mb-4">Hot Deals</h2>
+            <div className="relative">
+              <div className="flex overflow-x-auto pb-4 space-x-4">
+                {[...Array(5)].map((_, i) => (
+                  <div key={i} className="min-w-[200px] w-[200px] flex-shrink-0">
+                    <div className="bg-white rounded-lg shadow-sm p-3 animate-pulse">
+                      <div className="h-40 bg-gray-200 rounded-md mb-3"></div>
+                      <div className="h-4 bg-gray-200 rounded w-3/4 mb-2"></div>
+                      <div className="h-3 bg-gray-200 rounded w-1/2 mb-3"></div>
+                      <div className="flex justify-between items-center">
+                        <div className="h-5 bg-gray-200 rounded w-1/3"></div>
+                        <div className="h-7 bg-gray-200 rounded-full w-7"></div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+          
+          {/* Best Sellers Skeleton */}
+          <div className="mb-10">
+            <h2 className="text-2xl font-bold mb-4">Best Sellers</h2>
+            <div className="relative">
+              <div className="flex overflow-x-auto pb-4 space-x-4">
+                {[...Array(5)].map((_, i) => (
+                  <div key={i} className="min-w-[200px] w-[200px] flex-shrink-0">
+                    <div className="bg-white rounded-lg shadow-sm p-3 animate-pulse">
+                      <div className="h-40 bg-gray-200 rounded-md mb-3"></div>
+                      <div className="h-4 bg-gray-200 rounded w-3/4 mb-2"></div>
+                      <div className="h-3 bg-gray-200 rounded w-1/2 mb-3"></div>
+                      <div className="flex justify-between items-center">
+                        <div className="h-5 bg-gray-200 rounded w-1/3"></div>
+                        <div className="h-7 bg-gray-200 rounded-full w-7"></div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     );
   }
@@ -662,7 +570,7 @@ const Home = () => {
                 <span className="absolute -bottom-1 left-0 w-0 h-0.5 bg-[#3B82F6] transition-all duration-300 group-hover:w-full"></span>
               </h2>
             </div>
-            <Link to="/categories" className="text-[#3B82F6] hover:text-[#2563EB] text-sm font-medium transition-all duration-300 hover:translate-x-1">
+            <Link to="/categories" className="text-[#3B82F6] hover:text-[#2563EB] text-sm font-medium">
               View All Categories &rarr;
             </Link>
           </div>
@@ -1103,7 +1011,7 @@ const Home = () => {
       </div>
 
       {/* New Arrivals Section */}
-      <div className="bg-[#F5F5F5] py-8 mb-8">
+      <div className="bg-white py-8 mb-8">
         <div className="container mx-auto px-4">
           <div className="flex justify-between items-center mb-6">
             <div className="flex items-center">
@@ -1178,27 +1086,106 @@ const Home = () => {
       </div>
 
       {/* Shop by Category Grid Section */}
-      <div className="container mx-auto px-4 mb-12">
-        <h2 className="text-xl font-bold text-[#2E2E2E] mb-6">Shop by Category</h2>
-        
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
-          {categories.slice(0, 5).map((category) => (
-            <Link key={category.id} to={`/categories/${category.slug}`} className="block">
-              <div className="relative rounded-lg overflow-hidden h-40">
-                <img 
-                  src={category.image_url} 
-                  alt={category.name}
-                  className="w-full h-full object-cover"
-                />
-                <div className="absolute inset-0 bg-black bg-opacity-40 flex flex-col justify-end p-4">
-                  <h3 className="text-white font-medium">{category.name}</h3>
-                  <p className="text-white text-sm opacity-80">{category.product_count} Products</p>
+      <div className="bg-white py-8 mb-12">
+        <div className="container mx-auto px-4">
+          <h2 className="text-xl font-bold text-[#2E2E2E] mb-6">Shop by Category</h2>
+          
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+            {categories.slice(0, 5).map((category) => (
+              <Link key={category.id} to={`/categories/${category.slug}`} className="block">
+                <div className="relative rounded-lg overflow-hidden h-40">
+                  <img 
+                    src={category.image_url} 
+                    alt={category.name}
+                    className="w-full h-full object-cover"
+                  />
+                  <div className="absolute inset-0 bg-black bg-opacity-40 flex flex-col justify-end p-4">
+                    <h3 className="text-white font-medium">{category.name}</h3>
+                    <p className="text-white text-sm opacity-80">{category.product_count} Products</p>
+                  </div>
                 </div>
-              </div>
-            </Link>
-          ))}
+              </Link>
+            ))}
+          </div>
         </div>
       </div>
+
+      {/* Commented out Best Sellers Section - To be enabled later */}
+      {/*
+      <div className="bg-white py-8 mb-8">
+        <div className="container mx-auto px-4">
+          <div className="flex justify-between items-center mb-6">
+            <div className="flex items-center">
+              <div className="w-1 h-6 bg-[#3B82F6] mr-2"></div>
+              <h2 className="text-xl font-bold text-[#2E2E2E]">Best Sellers</h2>
+            </div>
+            <Link to="/products?bestseller=true" className="text-[#3B82F6] hover:text-[#2563EB] text-sm font-medium">
+              View All Best Sellers &rarr;
+            </Link>
+          </div>
+          
+          <div className="mx-auto max-w-[95%] mb-8">
+            <Slider
+              dots={false}
+              infinite={false}
+              speed={500}
+              slidesToShow={6}
+              slidesToScroll={3}
+              swipeToSlide={true}
+              draggable={true}
+              responsive={[
+                {
+                  breakpoint: 1280,
+                  settings: {
+                    slidesToShow: 5,
+                    slidesToScroll: 3,
+                  }
+                },
+                {
+                  breakpoint: 1024,
+                  settings: {
+                    slidesToShow: 4,
+                    slidesToScroll: 2,
+                  }
+                },
+                {
+                  breakpoint: 768,
+                  settings: {
+                    slidesToShow: 3,
+                    slidesToScroll: 1,
+                  }
+                },
+                {
+                  breakpoint: 640,
+                  settings: {
+                    slidesToShow: 2,
+                    slidesToScroll: 1,
+                  }
+                },
+                {
+                  breakpoint: 480,
+                  settings: {
+                    slidesToShow: 1.8,
+                    slidesToScroll: 1,
+                    centerMode: false,
+                    centerPadding: '20px',
+                  }
+                }
+              ]}
+              className="best-sellers-slider"
+            >
+              {bestSellers.slice(0, 12).map((product) => (
+                <div key={product.id} className="px-1 py-2">
+                  <div className="h-[350px] w-full">
+                    <ProductCard product={product} viewType="grid" />
+                  </div>
+                </div>
+              ))}
+            </Slider>
+          </div>
+        </div>
+      </div>
+      */}
 
     </div>
   );
